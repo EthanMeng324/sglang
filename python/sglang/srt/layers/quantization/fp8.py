@@ -572,11 +572,22 @@ class Fp8MoEMethod(FusedMoEMethodBase):
             # NOTE(HandH1998): To ensure proper alignment of the block-wise quantization scales, the output_size of the weights for both the gate and up layers must be divisible by block_n.
             # Required by column parallel or enabling merged weights
             if intermediate_size_per_partition % block_n != 0:
-                raise ValueError(
-                    f"The output_size of gate's and up's weight = "
-                    f"{intermediate_size_per_partition} is not divisible by "
-                    f"weight quantization block_n = {block_n}."
-                )
+                # Adjust block_n to fit the intermediate size for models like Qwen3-235B and MiniMax-M2
+                # Try smaller block sizes: 64, 32, 16
+                for candidate_block_n in [64, 32, 16]:
+                    if intermediate_size_per_partition % candidate_block_n == 0:
+                        logger.warning(
+                            f"Adjusting weight_block_size[0] from {block_n} to {candidate_block_n} "
+                            f"to fit intermediate_size_per_partition={intermediate_size_per_partition}"
+                        )
+                        block_n = candidate_block_n
+                        break
+                else:
+                    raise ValueError(
+                        f"The output_size of gate's and up's weight = "
+                        f"{intermediate_size_per_partition} is not divisible by "
+                        f"weight quantization block_n = {block_n}."
+                    )
             if tp_size > 1:
                 # Required by row parallel
                 if intermediate_size_per_partition % block_k != 0:

@@ -592,6 +592,10 @@ class ModelRunner:
                 )
             moe_tp_size = self.tp_size // self.moe_ep_size
 
+            # Skip check for models that don't have moe_intermediate_size attribute (e.g., MiniMax-M2)
+            if not hasattr(self.model_config.hf_text_config, "moe_intermediate_size"):
+                return
+
             moe_intermediate_size = (
                 self.model_config.hf_text_config.moe_intermediate_size
             )

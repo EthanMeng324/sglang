@@ -408,6 +408,8 @@ jobs:
           PERFETTO_RELAY_URL: ${{ vars.PERFETTO_RELAY_URL }}
           GPU_CONFIG: "8-gpu-b200"
         run: |
+          # TEMPORARY: Clean up corrupted Qwen3-235B cache (remove after first successful run)
+          rm -rf /hf_home/hub/models--Qwen--Qwen3-235B-A22B-Instruct-2507 || true
           rm -rf test/srt/performance_profiles_qwen3_235b/
           cd test
           IS_BLACKWELL=1 python3 nightly/test_qwen3_235b_perf.py
