@@ -8,6 +8,7 @@ from typing import Any, List, Optional
 import torch
 
 from sglang.srt.mem_cache.memory_pool_host import HostKVCache
+from sglang.srt.metrics.collector import StorageMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +170,7 @@ class HiCacheStorage(ABC):
 class HiCacheFile(HiCacheStorage):
 
     def __init__(
-        self, storage_config: HiCacheStorageConfig, file_path: str = "/tmp/hicache"
+        self, storage_config: HiCacheStorageConfig, file_path: str = "/home/ucmerced/hicache"
     ):
         self.file_path = os.getenv("SGLANG_HICACHE_FILE_BACKEND_STORAGE_DIR", file_path)
 
@@ -272,3 +273,10 @@ class HiCacheFile(HiCacheStorage):
         except Exception as e:
             logger.error(f"Failed to clear HiCacheFile storage: {e}")
             return False
+
+    def get_stats(self):
+        """
+        Return storage metrics. HiCacheFile does not track detailed statistics,
+        so it returns an empty StorageMetrics object.
+        """
+        return StorageMetrics()

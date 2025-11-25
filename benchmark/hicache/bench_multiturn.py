@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument(
         "--request-length",
         type=int,
-        default=512,
+        default=1024,
         help="Length of each new request",
     )
     parser.add_argument(
@@ -605,7 +605,7 @@ if __name__ == "__main__":
         request_rates = [args.request_rate]
     else:
         print("Auto-running with different request rates...")
-        request_rates = [16, 14, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+        request_rates = [16]
 
     for rate in request_rates:
         args.request_rate = rate
