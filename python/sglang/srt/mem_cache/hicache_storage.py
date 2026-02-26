@@ -170,7 +170,7 @@ class HiCacheStorage(ABC):
 class HiCacheFile(HiCacheStorage):
 
     def __init__(
-        self, storage_config: HiCacheStorageConfig, file_path: str = "/home/ucmerced/hicache"
+        self, storage_config: HiCacheStorageConfig, file_path: str = "/tmp/data/hm/hicache"
     ):
         self.file_path = os.getenv("SGLANG_HICACHE_FILE_BACKEND_STORAGE_DIR", file_path)
 

@@ -19,7 +19,7 @@ from sglang.srt.mem_cache.hicache_storage import (
 logger = logging.getLogger(__name__)
 
 # Default DAX device path
-DEFAULT_DAX_DEVICE = "/dev/dax1.0"
+DEFAULT_DAX_DEVICE = "/dev/dax0.0"
 
 # Use a simple directory-like structure on DAX device
 # Each key maps to a fixed-size slot based on its hash
