@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import math
+import os
+import time
 from functools import lru_cache
 from typing import Any
 
@@ -58,6 +60,13 @@ from sglang.multimodal_gen.runtime.utils.logging_utils import init_logger
 
 logger = init_logger(__name__)
 _is_cuda = current_platform.is_cuda()
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    return v.strip().lower() in {"1", "true", "yes", "on"}
 
 
 class WanImageEmbedding(torch.nn.Module):
@@ -780,6 +789,27 @@ class WanTransformer3DModel(CachableDiT, OffloadableDiTMixin):
         )
 
         self.layer_names = ["blocks"]
+        self._mock_comm_enabled = _env_bool("SGLANG_WAN_MOCK_COMM_ENABLE", False)
+        self._mock_comm_sleep_s = max(
+            0.0, float(os.getenv("SGLANG_WAN_MOCK_COMM_SLEEP_MS", "0")) / 1000.0
+        )
+        self._mock_comm_every_n_blocks = max(
+            1, int(os.getenv("SGLANG_WAN_MOCK_COMM_EVERY_N_BLOCKS", "1"))
+        )
+        if self._mock_comm_enabled and self._mock_comm_sleep_s > 0:
+            logger.info(
+                "Wan mock communication is enabled "
+                f"(sleep_ms={self._mock_comm_sleep_s * 1000:.2f}, "
+                f"every_n_blocks={self._mock_comm_every_n_blocks})."
+            )
+
+    def _maybe_mock_communication(self, *, block_idx: int) -> None:
+        if not self._mock_comm_enabled or self._mock_comm_sleep_s <= 0:
+            return
+        if (block_idx % self._mock_comm_every_n_blocks) != 0:
+            return
+        with self.comm_region(f"wan_mock_comm_block_{block_idx}"):
+            time.sleep(self._mock_comm_sleep_s)
 
     @lru_cache(maxsize=1)
     def _compute_rope_for_sequence_shard(
@@ -943,7 +973,8 @@ class WanTransformer3DModel(CachableDiT, OffloadableDiTMixin):
             if self.enable_teacache:
                 original_hidden_states = hidden_states.clone()
 
-            for block in self.blocks:
+            for block_idx, block in enumerate(self.blocks):
+                self._maybe_mock_communication(block_idx=block_idx)
                 hidden_states = block(
                     hidden_states, encoder_hidden_states, timestep_proj, freqs_cis
                 )
