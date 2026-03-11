@@ -4,7 +4,8 @@
 
 import math
 import os
-import time
+import queue
+import threading
 from functools import lru_cache
 from typing import Any
 
@@ -67,6 +68,26 @@ def _env_bool(name: str, default: bool = False) -> bool:
     if v is None:
         return default
     return v.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    try:
+        return int(v)
+    except Exception:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    try:
+        return float(v)
+    except Exception:
+        return default
 
 
 class WanImageEmbedding(torch.nn.Module):
@@ -408,6 +429,9 @@ class WanTransformerBlock(nn.Module):
         encoder_hidden_states: torch.Tensor,
         temb: torch.Tensor,
         freqs_cis: tuple[torch.Tensor, torch.Tensor],
+        mock_comm_fn: Any | None = None,
+        block_idx: int | None = None,
+        mock_comm_stats: dict[str, int] | None = None,
     ) -> torch.Tensor:
         if hidden_states.dim() == 4:
             hidden_states = hidden_states.squeeze(1)
@@ -471,6 +495,14 @@ class WanTransformerBlock(nn.Module):
             query, key = _apply_rotary_emb(
                 query, cos, sin, is_neox_style=False
             ), _apply_rotary_emb(key, cos, sin, is_neox_style=False)
+        if mock_comm_fn is not None and block_idx is not None:
+            transferred = int(
+                mock_comm_fn(block_idx=block_idx, hidden_states=hidden_states)
+            )
+            if mock_comm_stats is not None and transferred > 0:
+                mock_comm_stats["calls"] = mock_comm_stats.get("calls", 0) + 1
+                mock_comm_stats["bytes"] = mock_comm_stats.get("bytes", 0) + transferred
+
         attn_output = self.attn1(query, key, value)
         attn_output = attn_output.flatten(2)
         attn_output, _ = self.to_out(attn_output)
@@ -605,6 +637,9 @@ class WanTransformerBlock_VSA(nn.Module):
         encoder_hidden_states: torch.Tensor,
         temb: torch.Tensor,
         freqs_cis: tuple[torch.Tensor, torch.Tensor],
+        mock_comm_fn: Any | None = None,
+        block_idx: int | None = None,
+        mock_comm_stats: dict[str, int] | None = None,
     ) -> torch.Tensor:
         if hidden_states.dim() == 4:
             hidden_states = hidden_states.squeeze(1)
@@ -653,6 +688,14 @@ class WanTransformerBlock_VSA(nn.Module):
             query, key = _apply_rotary_emb(
                 query, cos, sin, is_neox_style=False
             ), _apply_rotary_emb(key, cos, sin, is_neox_style=False)
+
+        if mock_comm_fn is not None and block_idx is not None:
+            transferred = int(
+                mock_comm_fn(block_idx=block_idx, hidden_states=hidden_states)
+            )
+            if mock_comm_stats is not None and transferred > 0:
+                mock_comm_stats["calls"] = mock_comm_stats.get("calls", 0) + 1
+                mock_comm_stats["bytes"] = mock_comm_stats.get("bytes", 0) + transferred
 
         attn_output = self.attn1(query, key, value, gate_compress=gate_compress)
         attn_output = attn_output.flatten(2)
@@ -790,26 +833,212 @@ class WanTransformer3DModel(CachableDiT, OffloadableDiTMixin):
 
         self.layer_names = ["blocks"]
         self._mock_comm_enabled = _env_bool("SGLANG_WAN_MOCK_COMM_ENABLE", False)
-        self._mock_comm_sleep_s = max(
-            0.0, float(os.getenv("SGLANG_WAN_MOCK_COMM_SLEEP_MS", "0")) / 1000.0
-        )
         self._mock_comm_every_n_blocks = max(
             1, int(os.getenv("SGLANG_WAN_MOCK_COMM_EVERY_N_BLOCKS", "1"))
         )
-        if self._mock_comm_enabled and self._mock_comm_sleep_s > 0:
+        self._mock_comm_debug = _env_bool("SGLANG_WAN_MOCK_COMM_DEBUG", False)
+        self._mock_comm_fixed_mb = max(
+            0.0, _env_float("SGLANG_WAN_MOCK_COMM_PCIE_MB", 64.0)
+        )
+        self._mock_comm_virtual_sp_degree = max(
+            2, _env_int("SGLANG_WAN_MOCK_COMM_VIRTUAL_SP_DEGREE", 2)
+        )
+        self._mock_comm_traffic_scale = max(
+            0.01, _env_float("SGLANG_WAN_MOCK_COMM_TRAFFIC_SCALE", 1.0)
+        )
+        self._mock_comm_max_mb = max(
+            1, _env_int("SGLANG_WAN_MOCK_COMM_MAX_MB", 256)
+        )
+
+        self._mock_comm_capacity_bytes = 0
+        self._mock_comm_gpu_buffer: torch.Tensor | None = None
+        self._mock_comm_cpu_buffer: torch.Tensor | None = None
+        self._mock_comm_event_q: (
+            queue.Queue[tuple[torch.cuda.Event, torch.cuda.Event, str, bool]] | None
+        ) = None
+        self._mock_comm_event_stop = threading.Event()
+        self._mock_comm_event_thread: threading.Thread | None = None
+
+        if self._mock_comm_enabled:
+            if not torch.cuda.is_available():
+                raise RuntimeError(
+                    "SGLANG_WAN_MOCK_COMM_ENABLE=1 requires CUDA, but CUDA is unavailable."
+                )
+            self._mock_comm_event_q = queue.Queue()
+            self._mock_comm_event_thread = threading.Thread(
+                target=self._mock_comm_event_loop,
+                name="WanMockCommEventLoop",
+                daemon=True,
+            )
+            self._mock_comm_event_thread.start()
+
+        if self._mock_comm_enabled:
             logger.info(
-                "Wan mock communication is enabled "
-                f"(sleep_ms={self._mock_comm_sleep_s * 1000:.2f}, "
-                f"every_n_blocks={self._mock_comm_every_n_blocks})."
+                "Wan mock communication (PCIe transfer) is enabled "
+                f"(every_n_blocks={self._mock_comm_every_n_blocks}, "
+                f"fixed_mb={self._mock_comm_fixed_mb}, "
+                f"virtual_sp_degree={self._mock_comm_virtual_sp_degree}, "
+                f"traffic_scale={self._mock_comm_traffic_scale}, "
+                f"max_mb={self._mock_comm_max_mb})."
             )
 
-    def _maybe_mock_communication(self, *, block_idx: int) -> None:
-        if not self._mock_comm_enabled or self._mock_comm_sleep_s <= 0:
+    def _mock_comm_event_loop(self) -> None:
+        if self._mock_comm_event_q is None:
             return
+        pending: list[tuple[torch.cuda.Event, torch.cuda.Event, str, bool, bool]] = []
+        while not self._mock_comm_event_stop.is_set():
+            made_progress = False
+
+            # Drain queued mock-comm event pairs.
+            while True:
+                try:
+                    item = self._mock_comm_event_q.get_nowait()
+                except queue.Empty:
+                    break
+
+                # Backward-compatible tuple parsing:
+                # old/new queue payload: (start_event, end_event, tag)
+                # transient payload from intermediate revisions:
+                # (start_event, end_event, tag, tracker_started_inline)
+                if len(item) == 3:
+                    start_event, end_event, tag = item  # type: ignore[misc]
+                    started_inline = False
+                else:
+                    start_event, end_event, tag, started_inline = item  # type: ignore[misc]
+                pending.append(
+                    (start_event, end_event, tag, bool(started_inline), False)
+                )
+                made_progress = True
+
+            next_pending: list[
+                tuple[torch.cuda.Event, torch.cuda.Event, str, bool, bool]
+            ] = []
+            tracker = getattr(self, "comm_activity_tracker", None)
+            for start_event, end_event, tag, started, active_nvtx_pushed in pending:
+                if not started and start_event.query():
+                    if torch.cuda.is_available() and hasattr(torch.cuda, "nvtx"):
+                        torch.cuda.nvtx.range_push("SGL_MOCK_COMM_ACTIVE")
+                        active_nvtx_pushed = True
+                    if tracker is not None:
+                        tracker.mark_start(tag)
+                    started = True
+                    made_progress = True
+
+                if started and end_event.query():
+                    if tracker is not None:
+                        tracker.mark_end(tag)
+                    if (
+                        active_nvtx_pushed
+                        and torch.cuda.is_available()
+                        and hasattr(torch.cuda, "nvtx")
+                    ):
+                        torch.cuda.nvtx.range_pop()
+                    made_progress = True
+                    continue
+
+                next_pending.append(
+                    (start_event, end_event, tag, started, active_nvtx_pushed)
+                )
+            pending = next_pending
+
+            if made_progress:
+                continue
+
+            try:
+                item = self._mock_comm_event_q.get(timeout=0.001)
+            except queue.Empty:
+                continue
+            if len(item) == 3:
+                start_event, end_event, tag = item  # type: ignore[misc]
+                started_inline = False
+            else:
+                start_event, end_event, tag, started_inline = item  # type: ignore[misc]
+            pending.append(
+                (start_event, end_event, tag, bool(started_inline), False)
+            )
+
+    def _estimate_mock_comm_bytes(self, hidden_states: torch.Tensor) -> int:
+        if self._mock_comm_fixed_mb > 0:
+            return int(self._mock_comm_fixed_mb * 1024 * 1024)
+
+        hidden_bytes = hidden_states.numel() * hidden_states.element_size()
+        one_way = hidden_bytes * (
+            self._mock_comm_virtual_sp_degree - 1
+        ) // self._mock_comm_virtual_sp_degree
+        estimated = int(2 * one_way * self._mock_comm_traffic_scale)
+        max_bytes = self._mock_comm_max_mb * 1024 * 1024
+        return max(1, min(estimated, max_bytes))
+
+    def _ensure_mock_comm_buffers(self, num_bytes: int) -> None:
+        if (
+            self._mock_comm_gpu_buffer is not None
+            and self._mock_comm_cpu_buffer is not None
+            and self._mock_comm_capacity_bytes >= num_bytes
+        ):
+            return
+
+        self._mock_comm_gpu_buffer = torch.empty(
+            num_bytes, device=torch.cuda.current_device(), dtype=torch.uint8
+        )
+        self._mock_comm_cpu_buffer = torch.empty(
+            num_bytes, device="cpu", dtype=torch.uint8, pin_memory=True
+        )
+        self._mock_comm_capacity_bytes = num_bytes
+
+    @torch.compiler.disable
+    def _maybe_mock_communication(
+        self, *, block_idx: int, hidden_states: torch.Tensor
+    ) -> int:
+        if not self._mock_comm_enabled:
+            return 0
         if (block_idx % self._mock_comm_every_n_blocks) != 0:
-            return
-        with self.comm_region(f"wan_mock_comm_block_{block_idx}"):
-            time.sleep(self._mock_comm_sleep_s)
+            return 0
+        tag = f"wan_mock_comm_block_{block_idx}"
+        tracker = getattr(self, "comm_activity_tracker", None)
+        if tracker is not None and self._mock_comm_event_q is None:
+            raise RuntimeError(
+                "Mock communication is enabled but GPU mock-comm runtime is not initialized."
+            )
+
+        num_bytes = self._estimate_mock_comm_bytes(hidden_states)
+        # logger.info(
+        #     f"Wan mock communication: num_bytes={num_bytes}"
+        # )
+        self._ensure_mock_comm_buffers(num_bytes)
+        assert self._mock_comm_gpu_buffer is not None
+        assert self._mock_comm_cpu_buffer is not None
+
+        # One round-trip on PCIe: D2H then H2D. This is on critical path.
+        start_event = torch.cuda.Event()
+        start_event.record(torch.cuda.current_stream())
+        tracker_started_inline = False
+        if tracker is not None:
+            # Strict mode: block prefetch immediately when mock comm is scheduled,
+            # then release only after end_event is observed by the watcher thread.
+            tracker.mark_start(tag)
+            tracker_started_inline = True
+            quiesce_fn = getattr(self, "quiesce_prefetch_for_comm", None)
+            if callable(quiesce_fn):
+                quiesce_fn()
+        if torch.cuda.is_available() and hasattr(torch.cuda, "nvtx"):
+            torch.cuda.nvtx.range_push("SGL_MOCK_COMM_PCIE")
+        try:
+            self._mock_comm_cpu_buffer[:num_bytes].copy_(
+                self._mock_comm_gpu_buffer[:num_bytes], non_blocking=True
+            )
+            # self._mock_comm_gpu_buffer[:num_bytes].copy_(
+            #     self._mock_comm_cpu_buffer[:num_bytes], non_blocking=True
+            # )
+        finally:
+            if torch.cuda.is_available() and hasattr(torch.cuda, "nvtx"):
+                torch.cuda.nvtx.range_pop()
+        end_event = torch.cuda.Event()
+        end_event.record(torch.cuda.current_stream())
+        if self._mock_comm_event_q is not None:
+            self._mock_comm_event_q.put(
+                (start_event, end_event, tag, tracker_started_inline)
+            )
+        return num_bytes
 
     @lru_cache(maxsize=1)
     def _compute_rope_for_sequence_shard(
@@ -973,10 +1202,23 @@ class WanTransformer3DModel(CachableDiT, OffloadableDiTMixin):
             if self.enable_teacache:
                 original_hidden_states = hidden_states.clone()
 
+            mock_comm_stats = {"calls": 0, "bytes": 0}
             for block_idx, block in enumerate(self.blocks):
-                self._maybe_mock_communication(block_idx=block_idx)
                 hidden_states = block(
-                    hidden_states, encoder_hidden_states, timestep_proj, freqs_cis
+                    hidden_states,
+                    encoder_hidden_states,
+                    timestep_proj,
+                    freqs_cis,
+                    mock_comm_fn=self._maybe_mock_communication,
+                    block_idx=block_idx,
+                    mock_comm_stats=mock_comm_stats,
+                )
+            if self._mock_comm_debug and mock_comm_stats["calls"] > 0:
+                logger.info(
+                    "Wan mock communication injected in this forward: "
+                    f"calls={mock_comm_stats['calls']}, "
+                    f"total_transfer_mb={mock_comm_stats['bytes'] / (1024**2):.2f}, "
+                    f"per_call_mb={mock_comm_stats['bytes'] / (mock_comm_stats['calls'] * 1024**2):.2f}"
                 )
             # if teacache is enabled, we need to cache the original hidden states
             if self.enable_teacache:
