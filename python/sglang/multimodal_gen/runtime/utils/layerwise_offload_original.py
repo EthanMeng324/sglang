@@ -535,6 +535,7 @@ class LayerwiseOffloadManager:
         layers = getattr(self.model, self.layers_attr_str)
 
         def make_pre_hook(i):
+            @torch.compiler.disable
             def hook(module, input):
                 if i == 0:
                     self._begin_profile_step()
@@ -581,6 +582,7 @@ class LayerwiseOffloadManager:
             return hook
 
         def make_post_hook(i):
+            @torch.compiler.disable
             def hook(module, input, output):
                 # previous, we wait here, until the copy stream for next layer is finished,
                 # now with any prefetch_size, only wait for the copy stream, when the copy stream is for the next layer

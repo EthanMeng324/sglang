@@ -981,6 +981,7 @@ class LayerwiseOffloadManager:
         layers = getattr(self.model, self.layers_attr_str)
 
         def make_pre_hook(i):
+            @torch.compiler.disable
             def hook(module, input):
                 if i == 0:
                     self._begin_step_stats()
@@ -1003,6 +1004,7 @@ class LayerwiseOffloadManager:
             return hook
 
         def make_post_hook(i):
+            @torch.compiler.disable
             def hook(module, input, output):
                 self.release_layer(i)
                 if i == self.num_layers - 1:
