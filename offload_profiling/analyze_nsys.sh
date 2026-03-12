@@ -8,6 +8,7 @@ ANALYSIS_DIR="${ANALYSIS_DIR:-$PROFILES_DIR/analysis}"
 
 NEW_NSYS="${NEW_NSYS:-$PROFILES_DIR/new_offload_nsys.nsys-rep}"
 OLD_NSYS="${OLD_NSYS:-$PROFILES_DIR/old_offload_nsys.nsys-rep}"
+NO_NSYS="${NO_NSYS:-$PROFILES_DIR/no_offload_nsys.nsys-rep}"
 COMM_MODE="${1:-${COMM_MODE:-}}"
 
 if [[ -z "$COMM_MODE" ]]; then
@@ -49,6 +50,12 @@ if [[ ! -f "$OLD_NSYS" ]]; then
     exit 1
 fi
 
+if [[ ! -f "$NO_NSYS" ]]; then
+    echo "ERROR: missing no-offload profile: $NO_NSYS"
+    echo "Run: $SCRIPT_DIR/run_no.sh"
+    exit 1
+fi
+
 export_to_sqlite() {
     local rep_file="$1"
     local sqlite_file="${rep_file%.nsys-rep}.sqlite"
@@ -81,14 +88,16 @@ echo "NSYS EXPORT + ANALYSIS"
 echo "=========================================="
 echo "new: $NEW_NSYS"
 echo "old: $OLD_NSYS"
+echo "no : $NO_NSYS"
 echo "out: $ANALYSIS_DIR"
 echo "comm mode: $COMM_MODE"
 echo ""
 
 NEW_DB="$(export_to_sqlite "$NEW_NSYS")"
 OLD_DB="$(export_to_sqlite "$OLD_NSYS")"
+NO_DB="$(export_to_sqlite "$NO_NSYS")"
 
-python3 "$SCRIPT_DIR/nsys_query.py" "$NEW_DB" "$OLD_DB" "$ANALYSIS_DIR" "$COMM_MODE"
+python3 "$SCRIPT_DIR/nsys_query.py" "$NEW_DB" "$OLD_DB" "$NO_DB" "$ANALYSIS_DIR" "$COMM_MODE"
 python3 "$SCRIPT_DIR/summarize_nsys_csv.py" \
     --analysis-dir "$ANALYSIS_DIR" \
     --comm-mode "$COMM_MODE" \

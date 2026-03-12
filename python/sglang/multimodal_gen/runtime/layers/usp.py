@@ -33,6 +33,15 @@ def _get_comm_activity_tracker():
 
 
 @torch.compiler.disable
+def _get_comm_quiesce_fn():
+    try:
+        quiesce_fn = getattr(get_forward_context(), "comm_quiesce_fn", None)
+    except Exception:
+        return None
+    return quiesce_fn if callable(quiesce_fn) else None
+
+
+@torch.compiler.disable
 def _mark_comm_start(tracker, tag: str) -> None:
     if tracker is not None:
         tracker.mark_start(tag)
@@ -42,6 +51,12 @@ def _mark_comm_start(tracker, tag: str) -> None:
 def _mark_comm_end(tracker, tag: str) -> None:
     if tracker is not None:
         tracker.mark_end(tag)
+
+
+@torch.compiler.disable
+def _quiesce_prefetch_for_comm(quiesce_fn) -> None:
+    if quiesce_fn is not None:
+        quiesce_fn()
 
 
 def _maybe_wait(tensor: torch.Tensor) -> torch.Tensor:
@@ -60,8 +75,12 @@ def _usp_all_to_all_single(x: torch.Tensor, tag: str) -> torch.Tensor:
     x_shape = x.shape
     x = x.flatten()
     tracker = _get_comm_activity_tracker()
+    quiesce_fn = _get_comm_quiesce_fn()
     _mark_comm_start(tracker, tag)
     try:
+        # Mirror mock-comm correctness: freeze new launches and drain in-flight
+        # prefetch H2D before starting the real USP collective.
+        _quiesce_prefetch_for_comm(quiesce_fn)
         x = ft_c.all_to_all_single(
             x, output_split_sizes=None, input_split_sizes=None, group=ulysses_pg
         )

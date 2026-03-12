@@ -685,27 +685,12 @@ prefetch_marked_streams AS (
             AND n.end > m.start
       )
 ),
-prefetch_streams AS (
-    SELECT streamId FROM prefetch_marked_streams
-    UNION
-    SELECT streamId
-    FROM (
-        SELECT m.streamId
-        FROM memcpy_base m
-        WHERE m.copyKind = 1
-          AND m.bytes >= :prefetch_min_bytes
-        GROUP BY m.streamId
-        ORDER BY COUNT(*) DESC
-        LIMIT 1
-    )
-    WHERE NOT EXISTS (SELECT 1 FROM prefetch_marked_streams)
-),
 prefetch_h2d AS (
     SELECT m.start, m.end, m.deviceId
     FROM memcpy_base m
     WHERE m.copyKind = 1
       AND m.bytes >= :prefetch_min_bytes
-      AND m.streamId IN (SELECT streamId FROM prefetch_streams)
+      AND m.streamId IN (SELECT streamId FROM prefetch_marked_streams)
 ),
 mock_d2h AS (
     SELECT
@@ -738,6 +723,7 @@ mock_tagged AS (
 SELECT
     'during_prefetch_h2d' as context,
     COUNT(*) as mock_d2h_count,
+    SUM(dur_ms) as total_mock_d2h_ms,
     SUM(bytes) / 1e9 as total_mock_d2h_gb,
     AVG(bw_mbps) as avg_mock_d2h_bw_mbps,
     AVG(dur_ms) as avg_mock_d2h_dur_ms,
@@ -749,6 +735,7 @@ UNION ALL
 SELECT
     'without_prefetch_h2d' as context,
     COUNT(*) as mock_d2h_count,
+    SUM(dur_ms) as total_mock_d2h_ms,
     SUM(bytes) / 1e9 as total_mock_d2h_gb,
     AVG(bw_mbps) as avg_mock_d2h_bw_mbps,
     AVG(dur_ms) as avg_mock_d2h_dur_ms,
@@ -792,27 +779,12 @@ prefetch_marked_streams AS (
             AND n.end > m.start
       )
 ),
-prefetch_streams AS (
-    SELECT streamId FROM prefetch_marked_streams
-    UNION
-    SELECT streamId
-    FROM (
-        SELECT m.streamId
-        FROM memcpy_base m
-        WHERE m.copyKind = 1
-          AND m.bytes >= :prefetch_min_bytes
-        GROUP BY m.streamId
-        ORDER BY COUNT(*) DESC
-        LIMIT 1
-    )
-    WHERE NOT EXISTS (SELECT 1 FROM prefetch_marked_streams)
-),
 prefetch_h2d AS (
     SELECT m.start, m.end, m.deviceId
     FROM memcpy_base m
     WHERE m.copyKind = 1
       AND m.bytes >= :prefetch_min_bytes
-      AND m.streamId IN (SELECT streamId FROM prefetch_streams)
+      AND m.streamId IN (SELECT streamId FROM prefetch_marked_streams)
 ),
 mock_d2h AS (
     SELECT
@@ -897,34 +869,12 @@ prefetch_marked_streams AS (
             AND n.end > m.start
       )
 ),
-prefetch_streams AS (
-    SELECT streamId FROM prefetch_marked_streams
-    UNION
-    SELECT streamId
-    FROM (
-        SELECT m.streamId
-        FROM CUPTI_ACTIVITY_KIND_MEMCPY m
-        WHERE m.copyKind = 1
-          AND m.bytes >= :prefetch_min_bytes
-          AND (
-                (SELECT COUNT(*) FROM denoise_windows) = 0
-                OR EXISTS (
-                    SELECT 1 FROM denoise_windows d
-                    WHERE d.start < m.end AND d.end > m.start
-                )
-          )
-        GROUP BY m.streamId
-        ORDER BY COUNT(*) DESC
-        LIMIT 1
-    )
-    WHERE NOT EXISTS (SELECT 1 FROM prefetch_marked_streams)
-),
 prefetch_h2d AS (
     SELECT m.start, m.end, m.deviceId
     FROM CUPTI_ACTIVITY_KIND_MEMCPY m
     WHERE m.copyKind = 1
       AND m.bytes >= :prefetch_min_bytes
-      AND m.streamId IN (SELECT streamId FROM prefetch_streams)
+      AND m.streamId IN (SELECT streamId FROM prefetch_marked_streams)
       AND (
             (SELECT COUNT(*) FROM denoise_windows) = 0
             OR EXISTS (
@@ -1020,34 +970,12 @@ prefetch_marked_streams AS (
             AND n.end > m.start
       )
 ),
-prefetch_streams AS (
-    SELECT streamId FROM prefetch_marked_streams
-    UNION
-    SELECT streamId
-    FROM (
-        SELECT m.streamId
-        FROM CUPTI_ACTIVITY_KIND_MEMCPY m
-        WHERE m.copyKind = 1
-          AND m.bytes >= :prefetch_min_bytes
-          AND (
-                (SELECT COUNT(*) FROM denoise_windows) = 0
-                OR EXISTS (
-                    SELECT 1 FROM denoise_windows d
-                    WHERE d.start < m.end AND d.end > m.start
-                )
-          )
-        GROUP BY m.streamId
-        ORDER BY COUNT(*) DESC
-        LIMIT 1
-    )
-    WHERE NOT EXISTS (SELECT 1 FROM prefetch_marked_streams)
-),
 prefetch_h2d AS (
     SELECT m.start, m.end, m.deviceId
     FROM CUPTI_ACTIVITY_KIND_MEMCPY m
     WHERE m.copyKind = 1
       AND m.bytes >= :prefetch_min_bytes
-      AND m.streamId IN (SELECT streamId FROM prefetch_streams)
+      AND m.streamId IN (SELECT streamId FROM prefetch_marked_streams)
       AND (
             (SELECT COUNT(*) FROM denoise_windows) = 0
             OR EXISTS (
@@ -1729,19 +1657,33 @@ ORDER BY g.gap_ms DESC;
 
 
 def main():
-    if len(sys.argv) not in (4, 5):
-        log(f"Usage: {sys.argv[0]} <new_db> <old_db> <output_dir> [mock|real]")
+    if len(sys.argv) not in (5, 6):
+        log(
+            f"Usage: {sys.argv[0]} <new_db> <old_db> <no_db> <output_dir> [mock|real]"
+        )
         sys.exit(1)
 
     new_db = sys.argv[1]
     old_db = sys.argv[2]
-    output_dir = sys.argv[3]
-    comm_mode = sys.argv[4] if len(sys.argv) == 5 else "mock"
+    no_db = sys.argv[3]
+    output_dir = sys.argv[4]
+    comm_mode = sys.argv[5] if len(sys.argv) == 6 else "mock"
     if comm_mode not in {"mock", "real"}:
         log(f"ERROR: unsupported comm mode: {comm_mode}")
         sys.exit(1)
 
-    for db in [new_db, old_db]:
+    run_dbs = {
+        "new": new_db,
+        "old": old_db,
+        "no": no_db,
+    }
+    run_labels = {
+        "new": "New Offload",
+        "old": "Old Offload",
+        "no": "No Offload",
+    }
+
+    for db in run_dbs.values():
         if not os.path.exists(db):
             log(f"ERROR: Database not found: {db}")
             sys.exit(1)
@@ -1750,7 +1692,7 @@ def main():
 
     log("Verifying database schema and tracing markers...")
     db_info = {}
-    for db in [new_db, old_db]:
+    for db in run_dbs.values():
         info = detect_mock_d2h_bytes(db)
         conn = sqlite3.connect(db)
         nccl_count = fetch_scalar(
@@ -1785,34 +1727,23 @@ def main():
                 "nccl_kernels",
             ]
         )
-        writer.writerow(
-            [
-                "new",
-                os.path.basename(new_db),
-                db_info[new_db]["denoise_windows"],
-                db_info[new_db]["prefetch_ranges"],
-                db_info[new_db]["mock_nvtx_ranges"],
-                db_info[new_db]["bytes"] if db_info[new_db]["bytes"] is not None else "",
-                db_info[new_db]["count"],
-                db_info[new_db]["nccl_kernels"],
-            ]
-        )
-        writer.writerow(
-            [
-                "old",
-                os.path.basename(old_db),
-                db_info[old_db]["denoise_windows"],
-                db_info[old_db]["prefetch_ranges"],
-                db_info[old_db]["mock_nvtx_ranges"],
-                db_info[old_db]["bytes"] if db_info[old_db]["bytes"] is not None else "",
-                db_info[old_db]["count"],
-                db_info[old_db]["nccl_kernels"],
-            ]
-        )
+        for run_name, db in run_dbs.items():
+            writer.writerow(
+                [
+                    run_name,
+                    os.path.basename(db),
+                    db_info[db]["denoise_windows"],
+                    db_info[db]["prefetch_ranges"],
+                    db_info[db]["mock_nvtx_ranges"],
+                    db_info[db]["bytes"] if db_info[db]["bytes"] is not None else "",
+                    db_info[db]["count"],
+                    db_info[db]["nccl_kernels"],
+                ]
+            )
     log(f"  Marker status saved: {os.path.basename(marker_status_path)}")
 
     log("\nCreating indices (one-time, speeds up overlap queries)...")
-    for db in [new_db, old_db]:
+    for db in run_dbs.values():
         create_indices(db)
     log("")
 
@@ -1873,37 +1804,26 @@ def main():
         log(f"  {title}")
         log(f"{'=' * 72}")
 
-        new_params = None
-        old_params = None
-        if comm_mode == "mock" and prefix in {
-            "comm_overlap",
-            "comm_overlap_ratio",
-        }:
-            new_params = {
-                "mock_bytes": db_info[new_db]["bytes"] or -1,
-                "prefetch_min_bytes": prefetch_min_bytes,
-            }
-            old_params = {
-                "mock_bytes": db_info[old_db]["bytes"] or -1,
-                "prefetch_min_bytes": prefetch_min_bytes,
-            }
-        elif prefix in {"comm_overlap", "comm_overlap_ratio"}:
-            new_params = {"prefetch_min_bytes": prefetch_min_bytes}
-            old_params = {"prefetch_min_bytes": prefetch_min_bytes}
-        run_query(
-            new_db,
-            query,
-            os.path.join(output_dir, f"{prefix}_new.csv"),
-            "New Offload",
-            params=new_params,
-        )
-        run_query(
-            old_db,
-            query,
-            os.path.join(output_dir, f"{prefix}_old.csv"),
-            "Old Offload",
-            params=old_params,
-        )
+        for run_name, db in run_dbs.items():
+            params = None
+            if comm_mode == "mock" and prefix in {
+                "comm_overlap",
+                "comm_overlap_ratio",
+            }:
+                params = {
+                    "mock_bytes": db_info[db]["bytes"] or -1,
+                    "prefetch_min_bytes": prefetch_min_bytes,
+                }
+            elif prefix in {"comm_overlap", "comm_overlap_ratio"}:
+                params = {"prefetch_min_bytes": prefetch_min_bytes}
+
+            run_query(
+                db,
+                query,
+                os.path.join(output_dir, f"{prefix}_{run_name}.csv"),
+                run_labels[run_name],
+                params=params,
+            )
 
     log(f"\n{'=' * 72}")
     log("  ANALYSIS COMPLETE")

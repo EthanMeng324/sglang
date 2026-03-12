@@ -6,7 +6,7 @@ import time
 from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional, Type
+from typing import TYPE_CHECKING, Callable, Optional, Type
 
 import torch
 
@@ -42,6 +42,7 @@ class ForwardContext:
     forward_batch: Optional["Req"] = None
     attention_backend_cls: Optional[Type] = None
     comm_activity_tracker: Optional["CommunicationActivityTracker"] = None
+    comm_quiesce_fn: Optional[Callable[[], None]] = None
 
     def set_attn_backend_cls(self, attention_backend_cls: Type):
         if self.attention_backend_cls:
