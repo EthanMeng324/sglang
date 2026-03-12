@@ -15,6 +15,9 @@ from sglang.multimodal_gen.runtime.utils.logging_utils import init_logger
 if TYPE_CHECKING:
     from sglang.multimodal_gen.runtime.layers.attention import AttentionMetadata
     from sglang.multimodal_gen.runtime.pipelines_core import Req
+    from sglang.multimodal_gen.runtime.utils.comm_aware_prefetch import (
+        CommunicationActivityTracker,
+    )
 
 logger = init_logger(__name__)
 
@@ -38,6 +41,7 @@ class ForwardContext:
     attn_metadata: "AttentionMetadata"  # set dynamically for each forward pass
     forward_batch: Optional["Req"] = None
     attention_backend_cls: Optional[Type] = None
+    comm_activity_tracker: Optional["CommunicationActivityTracker"] = None
 
     def set_attn_backend_cls(self, attention_backend_cls: Type):
         if self.attention_backend_cls:

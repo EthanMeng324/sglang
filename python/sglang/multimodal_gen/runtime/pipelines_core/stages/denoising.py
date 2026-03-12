@@ -1078,22 +1078,28 @@ class DenoisingStage(PipelineStage):
                                     timestep_value=t_int,
                                     timesteps=timesteps_cpu,
                                 )
-                                noise_pred = self._predict_noise_with_cfg(
-                                    current_model=current_model,
-                                    latent_model_input=latent_model_input,
-                                    timestep=timestep,
-                                    batch=batch,
-                                    timestep_index=i,
-                                    attn_metadata=attn_metadata,
-                                    target_dtype=target_dtype,
-                                    current_guidance_scale=current_guidance_scale,
-                                    image_kwargs=image_kwargs,
-                                    pos_cond_kwargs=pos_cond_kwargs,
-                                    neg_cond_kwargs=neg_cond_kwargs,
-                                    server_args=server_args,
-                                    guidance=guidance,
-                                    latents=latents,
-                                )
+                                self._set_offload_profile_step_idx(current_model, i)
+                                try:
+                                    noise_pred = self._predict_noise_with_cfg(
+                                        current_model=current_model,
+                                        latent_model_input=latent_model_input,
+                                        timestep=timestep,
+                                        batch=batch,
+                                        timestep_index=i,
+                                        attn_metadata=attn_metadata,
+                                        target_dtype=target_dtype,
+                                        current_guidance_scale=current_guidance_scale,
+                                        image_kwargs=image_kwargs,
+                                        pos_cond_kwargs=pos_cond_kwargs,
+                                        neg_cond_kwargs=neg_cond_kwargs,
+                                        server_args=server_args,
+                                        guidance=guidance,
+                                        latents=latents,
+                                    )
+                                finally:
+                                    self._set_offload_profile_step_idx(
+                                        current_model, None
+                                    )
 
                                 # Save noise_pred to batch for external access (e.g., ComfyUI)
                                 if server_args.comfyui_mode:
@@ -1366,6 +1372,15 @@ class DenoisingStage(PipelineStage):
             guidance=guidance,
             **kwargs,
         )
+
+    def _set_offload_profile_step_idx(
+        self, model: nn.Module | None, step_idx: int | None
+    ) -> None:
+        if model is None:
+            return
+        setter = getattr(model, "set_offload_profile_step_idx", None)
+        if callable(setter):
+            setter(step_idx)
 
     def _predict_noise_with_cfg(
         self,

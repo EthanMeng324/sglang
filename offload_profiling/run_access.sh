@@ -6,11 +6,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RESULTS_DIR="${RESULTS_DIR:-$SCRIPT_DIR/results}"
 PROFILES_DIR="${PROFILES_DIR:-$RESULTS_DIR/profiles}"
 
-mkdir -p /tmp/data/tmp
-chmod 777 /tmp/data/tmp
-export TMPDIR=/tmp/data/tmp
-export TEMP=/tmp/data/tmp
-export TMP=/tmp/data/tmp
+module purge
+module load Miniforge3/25.3.0-3
+module load CUDA/12.8.0
+module load GCC/12.3.0
 
 mkdir -p "$RESULTS_DIR" "$PROFILES_DIR"
 
@@ -39,7 +38,7 @@ echo ""
 python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU count: {torch.cuda.device_count()}')"
 echo ""
 
-MODEL_PATH="${MODEL_PATH:-Wan-AI/Wan2.2-TI2V-5B-Diffusers}"
+MODEL_PATH="${MODEL_PATH:-/scratch/user/u.hm347392/sglang/Wan2.2-TI2V-5B-Diffusers}"
 PROMPT="${PROMPT:-A cat walks on the grass, realistic}"
 NUM_FRAMES="${NUM_FRAMES:-81}"
 HEIGHT="${HEIGHT:-704}"
@@ -47,8 +46,8 @@ WIDTH="${WIDTH:-1280}"
 NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-9}"
 GUIDANCE_SCALE="${GUIDANCE_SCALE:-3.5}"
 GUIDANCE_SCALE_2="${GUIDANCE_SCALE_2:-4.0}"
-NUM_GPUS="${NUM_GPUS:-1}"
-ULYSSES_DEGREE="${ULYSSES_DEGREE:-1}"
+NUM_GPUS="${NUM_GPUS:-2}"
+ULYSSES_DEGREE="${ULYSSES_DEGREE:-2}"
 ATTENTION_BACKEND="${ATTENTION_BACKEND:-sage_attn}"
 NSYS_OUTPUT_PREFIX="${NSYS_OUTPUT_PREFIX:-$PROFILES_DIR/new_offload_nsys}"
 VIDEO_OUT="${VIDEO_OUT:-$RESULTS_DIR/nsys_new_offload_profiled.mp4}"
@@ -88,7 +87,7 @@ export SGLANG_DIT_COMM_AWARE_OFFLOAD="${SGLANG_DIT_COMM_AWARE_OFFLOAD:-1}"
 export SGLANG_DIT_COMM_AWARE_PATCH_TORCH_DIST="${SGLANG_DIT_COMM_AWARE_PATCH_TORCH_DIST:-0}"
 export SGLANG_DIT_COMM_PREFETCH_CHUNK_SIZE_MB="${SGLANG_DIT_COMM_PREFETCH_CHUNK_SIZE_MB:-16}"
 export SGLANG_DIT_COMM_PREFETCH_SUBMODULE_GRANULARITY=1
-export SGLANG_WAN_MOCK_COMM_ENABLE="${SGLANG_WAN_MOCK_COMM_ENABLE:-1}"
+export SGLANG_WAN_MOCK_COMM_ENABLE="${SGLANG_WAN_MOCK_COMM_ENABLE:-0}"
 export SGLANG_WAN_MOCK_COMM_EVERY_N_BLOCKS="${SGLANG_WAN_MOCK_COMM_EVERY_N_BLOCKS:-1}"
 export SGLANG_WAN_MOCK_COMM_DEBUG="${SGLANG_WAN_MOCK_COMM_DEBUG:-0}"
 export SGLANG_WAN_MOCK_COMM_PCIE_MB="${SGLANG_WAN_MOCK_COMM_PCIE_MB:-512}"

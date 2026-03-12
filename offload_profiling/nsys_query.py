@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """nsys_query.py -- Run SQL queries on nsys-exported SQLite databases.
 
-This version is tuned for offload profiling with mock communication:
-- Restrict analysis to denoising window when NVTX marker exists.
-- Diagnose whether mock D2H (critical path) is slowed by prefetch H2D overlap.
-- Diagnose chunk-wise overhead (copy fragmentation / idle attribution).
-- Auto-detect mock D2H signature bytes from D2H size histogram.
+Supports two communication analysis modes:
+- mock: use mock D2H memcpy as the communication critical path
+- real: use NCCL kernels as the communication critical path
 """
 
 import csv
@@ -858,6 +856,243 @@ SELECT
 FROM mock_tagged;
 """
 
+REAL_COMM_OVERLAP_QUERY = """
+WITH denoise_windows AS (
+    SELECT start, end
+    FROM NVTX_EVENTS
+    WHERE text = 'SGL_DENOISING_LOOP' AND end IS NOT NULL
+),
+kernel_base AS (
+    SELECT k.*
+    FROM CUPTI_ACTIVITY_KIND_KERNEL k
+    WHERE (SELECT COUNT(*) FROM denoise_windows) = 0
+       OR EXISTS (
+            SELECT 1 FROM denoise_windows d
+            WHERE d.start < k.end AND d.end > k.start
+       )
+),
+prefetch_marked_streams AS (
+    SELECT DISTINCT m.streamId
+    FROM CUPTI_ACTIVITY_KIND_MEMCPY m
+    WHERE m.copyKind = 1
+      AND m.bytes >= :prefetch_min_bytes
+      AND (
+            (SELECT COUNT(*) FROM denoise_windows) = 0
+            OR EXISTS (
+                SELECT 1 FROM denoise_windows d
+                WHERE d.start < m.end AND d.end > m.start
+            )
+      )
+      AND EXISTS (
+          SELECT 1
+          FROM NVTX_EVENTS n
+          WHERE n.text IN (
+                'SGL_PREFETCH_H2D',
+                'SGL_PREFETCH_H2D_BG',
+                'SGL_PREFETCH_H2D_SYNC',
+                'SGL_PREFETCH_H2D_CHUNK'
+          )
+            AND n.end IS NOT NULL
+            AND n.start < m.end
+            AND n.end > m.start
+      )
+),
+prefetch_streams AS (
+    SELECT streamId FROM prefetch_marked_streams
+    UNION
+    SELECT streamId
+    FROM (
+        SELECT m.streamId
+        FROM CUPTI_ACTIVITY_KIND_MEMCPY m
+        WHERE m.copyKind = 1
+          AND m.bytes >= :prefetch_min_bytes
+          AND (
+                (SELECT COUNT(*) FROM denoise_windows) = 0
+                OR EXISTS (
+                    SELECT 1 FROM denoise_windows d
+                    WHERE d.start < m.end AND d.end > m.start
+                )
+          )
+        GROUP BY m.streamId
+        ORDER BY COUNT(*) DESC
+        LIMIT 1
+    )
+    WHERE NOT EXISTS (SELECT 1 FROM prefetch_marked_streams)
+),
+prefetch_h2d AS (
+    SELECT m.start, m.end, m.deviceId
+    FROM CUPTI_ACTIVITY_KIND_MEMCPY m
+    WHERE m.copyKind = 1
+      AND m.bytes >= :prefetch_min_bytes
+      AND m.streamId IN (SELECT streamId FROM prefetch_streams)
+      AND (
+            (SELECT COUNT(*) FROM denoise_windows) = 0
+            OR EXISTS (
+                SELECT 1 FROM denoise_windows d
+                WHERE d.start < m.end AND d.end > m.start
+            )
+      )
+),
+real_comm AS (
+    SELECT
+        k.start,
+        k.end,
+        k.deviceId,
+        (k.end - k.start) / 1e6 as dur_ms
+    FROM kernel_base k
+    JOIN StringIds s ON k.demangledName = s.id
+    WHERE s.value LIKE '%nccl%'
+),
+real_tagged AS (
+    SELECT
+        d.*,
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM prefetch_h2d h
+                WHERE h.deviceId = d.deviceId
+                  AND h.start < d.end
+                  AND h.end > d.start
+            ) THEN 1
+            ELSE 0
+        END as overlap_prefetch_h2d
+    FROM real_comm d
+)
+SELECT
+    'during_prefetch_h2d' as context,
+    COUNT(*) as comm_count,
+    SUM(dur_ms) as total_comm_ms,
+    AVG(dur_ms) as avg_comm_dur_ms,
+    MIN(dur_ms) as min_comm_dur_ms,
+    MAX(dur_ms) as max_comm_dur_ms
+FROM real_tagged
+WHERE overlap_prefetch_h2d = 1
+UNION ALL
+SELECT
+    'without_prefetch_h2d' as context,
+    COUNT(*) as comm_count,
+    SUM(dur_ms) as total_comm_ms,
+    AVG(dur_ms) as avg_comm_dur_ms,
+    MIN(dur_ms) as min_comm_dur_ms,
+    MAX(dur_ms) as max_comm_dur_ms
+FROM real_tagged
+WHERE overlap_prefetch_h2d = 0;
+"""
+
+REAL_COMM_OVERLAP_RATIO_QUERY = """
+WITH denoise_windows AS (
+    SELECT start, end
+    FROM NVTX_EVENTS
+    WHERE text = 'SGL_DENOISING_LOOP' AND end IS NOT NULL
+),
+kernel_base AS (
+    SELECT k.*
+    FROM CUPTI_ACTIVITY_KIND_KERNEL k
+    WHERE (SELECT COUNT(*) FROM denoise_windows) = 0
+       OR EXISTS (
+            SELECT 1 FROM denoise_windows d
+            WHERE d.start < k.end AND d.end > k.start
+       )
+),
+prefetch_marked_streams AS (
+    SELECT DISTINCT m.streamId
+    FROM CUPTI_ACTIVITY_KIND_MEMCPY m
+    WHERE m.copyKind = 1
+      AND m.bytes >= :prefetch_min_bytes
+      AND (
+            (SELECT COUNT(*) FROM denoise_windows) = 0
+            OR EXISTS (
+                SELECT 1 FROM denoise_windows d
+                WHERE d.start < m.end AND d.end > m.start
+            )
+      )
+      AND EXISTS (
+          SELECT 1
+          FROM NVTX_EVENTS n
+          WHERE n.text IN (
+                'SGL_PREFETCH_H2D',
+                'SGL_PREFETCH_H2D_BG',
+                'SGL_PREFETCH_H2D_SYNC',
+                'SGL_PREFETCH_H2D_CHUNK'
+          )
+            AND n.end IS NOT NULL
+            AND n.start < m.end
+            AND n.end > m.start
+      )
+),
+prefetch_streams AS (
+    SELECT streamId FROM prefetch_marked_streams
+    UNION
+    SELECT streamId
+    FROM (
+        SELECT m.streamId
+        FROM CUPTI_ACTIVITY_KIND_MEMCPY m
+        WHERE m.copyKind = 1
+          AND m.bytes >= :prefetch_min_bytes
+          AND (
+                (SELECT COUNT(*) FROM denoise_windows) = 0
+                OR EXISTS (
+                    SELECT 1 FROM denoise_windows d
+                    WHERE d.start < m.end AND d.end > m.start
+                )
+          )
+        GROUP BY m.streamId
+        ORDER BY COUNT(*) DESC
+        LIMIT 1
+    )
+    WHERE NOT EXISTS (SELECT 1 FROM prefetch_marked_streams)
+),
+prefetch_h2d AS (
+    SELECT m.start, m.end, m.deviceId
+    FROM CUPTI_ACTIVITY_KIND_MEMCPY m
+    WHERE m.copyKind = 1
+      AND m.bytes >= :prefetch_min_bytes
+      AND m.streamId IN (SELECT streamId FROM prefetch_streams)
+      AND (
+            (SELECT COUNT(*) FROM denoise_windows) = 0
+            OR EXISTS (
+                SELECT 1 FROM denoise_windows d
+                WHERE d.start < m.end AND d.end > m.start
+            )
+      )
+),
+real_comm AS (
+    SELECT
+        k.start,
+        k.end,
+        k.deviceId,
+        (k.end - k.start) / 1e6 as dur_ms
+    FROM kernel_base k
+    JOIN StringIds s ON k.demangledName = s.id
+    WHERE s.value LIKE '%nccl%'
+),
+real_tagged AS (
+    SELECT
+        d.*,
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM prefetch_h2d h
+                WHERE h.deviceId = d.deviceId
+                  AND h.start < d.end
+                  AND h.end > d.start
+            ) THEN 1
+            ELSE 0
+        END as overlap_prefetch_h2d
+    FROM real_comm d
+)
+SELECT
+    COUNT(*) as total_comm_count,
+    SUM(CASE WHEN overlap_prefetch_h2d = 1 THEN 1 ELSE 0 END) as overlapped_comm_count,
+    CASE
+        WHEN COUNT(*) = 0 THEN NULL
+        ELSE 100.0 * SUM(CASE WHEN overlap_prefetch_h2d = 1 THEN 1 ELSE 0 END) / COUNT(*)
+    END as overlapped_comm_ratio_pct,
+    AVG(CASE WHEN overlap_prefetch_h2d = 1 THEN dur_ms END) as avg_dur_overlapped_ms,
+    AVG(CASE WHEN overlap_prefetch_h2d = 0 THEN dur_ms END) as avg_dur_non_overlapped_ms
+FROM real_tagged;
+"""
+
 MOCK_D2H_PREFETCH_ORDER_QUERY = """
 WITH denoise_windows AS (
     SELECT start, end
@@ -1063,7 +1298,7 @@ GROUP BY step_idx
 ORDER BY step_idx;
 """
 
-DENOISING_STEP_COMPONENT_QUERY = """
+MOCK_DENOISING_STEP_COMPONENT_QUERY = """
 WITH step_ranges AS (
     SELECT
         CASE
@@ -1118,6 +1353,100 @@ comm_ranges AS (
     FROM memcpy_base m
     JOIN mock_sig s ON m.bytes = s.bytes
     WHERE m.copyKind = 2
+),
+ensure_ranges AS (
+    SELECT n.start, n.end
+    FROM NVTX_EVENTS n
+    WHERE n.end IS NOT NULL
+      AND n.text = 'SGL_PREFETCH_ENSURE_READY'
+),
+step_comm AS (
+    SELECT
+        s.step_idx,
+        SUM(
+            (MIN(s.step_end, c.end) - MAX(s.step_start, c.start)) / 1e6
+        ) as comm_ms
+    FROM step_ranges s
+    JOIN comm_ranges c
+      ON c.start < s.step_end
+     AND c.end > s.step_start
+    GROUP BY s.step_idx
+),
+step_ensure AS (
+    SELECT
+        s.step_idx,
+        SUM(
+            (MIN(s.step_end, e.end) - MAX(s.step_start, e.start)) / 1e6
+        ) as ensure_ms
+    FROM step_ranges s
+    JOIN ensure_ranges e
+      ON e.start < s.step_end
+     AND e.end > s.step_start
+    GROUP BY s.step_idx
+),
+step_kernel AS (
+    SELECT
+        s.step_idx,
+        SUM(
+            (MIN(s.step_end, k.end) - MAX(s.step_start, k.start)) / 1e6
+        ) as kernel_ms
+    FROM step_ranges s
+    JOIN kernel_base k
+      ON k.start < s.step_end
+     AND k.end > s.step_start
+    GROUP BY s.step_idx
+)
+SELECT
+    s.step_idx,
+    s.step_total_ms,
+    COALESCE(sk.kernel_ms, 0.0) as kernel_ms,
+    COALESCE(sc.comm_ms, 0.0) as comm_ms,
+    COALESCE(se.ensure_ms, 0.0) as ensure_ms,
+    (s.step_total_ms - COALESCE(sc.comm_ms, 0.0) - COALESCE(se.ensure_ms, 0.0)) as residual_ms
+FROM step_ranges s
+LEFT JOIN step_comm sc ON sc.step_idx = s.step_idx
+LEFT JOIN step_ensure se ON se.step_idx = s.step_idx
+LEFT JOIN step_kernel sk ON sk.step_idx = s.step_idx
+ORDER BY s.step_idx;
+"""
+
+REAL_DENOISING_STEP_COMPONENT_QUERY = """
+WITH step_ranges AS (
+    SELECT
+        CASE
+            WHEN n.text GLOB 'SGL_DENOISING_STEP_*'
+            THEN CAST(SUBSTR(n.text, LENGTH('SGL_DENOISING_STEP_') + 1) AS INTEGER)
+            ELSE CAST(SUBSTR(n.text, LENGTH('denoising_step_') + 1) AS INTEGER)
+        END as step_idx,
+        n.start as step_start,
+        n.end as step_end,
+        (n.end - n.start) / 1e6 as step_total_ms
+    FROM NVTX_EVENTS n
+    WHERE n.end IS NOT NULL
+      AND (
+          n.text GLOB 'SGL_DENOISING_STEP_*'
+          OR n.text GLOB 'denoising_step_*'
+      )
+),
+denoise_windows AS (
+    SELECT start, end
+    FROM NVTX_EVENTS
+    WHERE text = 'SGL_DENOISING_LOOP' AND end IS NOT NULL
+),
+kernel_base AS (
+    SELECT k.*
+    FROM CUPTI_ACTIVITY_KIND_KERNEL k
+    WHERE (SELECT COUNT(*) FROM denoise_windows) = 0
+       OR EXISTS (
+            SELECT 1 FROM denoise_windows d
+            WHERE d.start < k.end AND d.end > k.start
+       )
+),
+comm_ranges AS (
+    SELECT k.start, k.end
+    FROM kernel_base k
+    JOIN StringIds s ON k.demangledName = s.id
+    WHERE s.value LIKE '%nccl%'
 ),
 ensure_ranges AS (
     SELECT n.start, n.end
@@ -1400,13 +1729,17 @@ ORDER BY g.gap_ms DESC;
 
 
 def main():
-    if len(sys.argv) != 4:
-        log(f"Usage: {sys.argv[0]} <new_db> <old_db> <output_dir>")
+    if len(sys.argv) not in (4, 5):
+        log(f"Usage: {sys.argv[0]} <new_db> <old_db> <output_dir> [mock|real]")
         sys.exit(1)
 
     new_db = sys.argv[1]
     old_db = sys.argv[2]
     output_dir = sys.argv[3]
+    comm_mode = sys.argv[4] if len(sys.argv) == 5 else "mock"
+    if comm_mode not in {"mock", "real"}:
+        log(f"ERROR: unsupported comm mode: {comm_mode}")
+        sys.exit(1)
 
     for db in [new_db, old_db]:
         if not os.path.exists(db):
@@ -1483,87 +1816,52 @@ def main():
         create_indices(db)
     log("")
 
-    base_queries = [
-        ("QUERY 1: H2D MEMCPY BANDWIDTH (denoising window)", H2D_QUERY, "h2d"),
-        ("QUERY 1a: D2H MEMCPY BANDWIDTH (denoising window)", D2H_QUERY, "d2h"),
-        (
-            "QUERY 1b: mock D2H signature (top sizes in denoising window)",
-            MOCK_D2H_TOP_QUERY,
-            "mock_d2h_signature",
-        ),
-        (
-            "QUERY 1c: PREFETCH H2D execution profile (copy granularity/efficiency)",
-            PREFETCH_H2D_STATS_QUERY,
-            "prefetch_h2d_stats",
-        ),
-        ("QUERY 1d: PREFETCH H2D BY SIZE BUCKET", H2D_BUCKETS_QUERY, "h2d_buckets"),
-        (
-            "QUERY 1e: PREFETCH H2D mode breakdown (background vs sync-catchup)",
-            PREFETCH_MODE_BREAKDOWN_QUERY,
-            "prefetch_mode_breakdown",
-        ),
-        (
-            "QUERY 1e1: PREFETCH bytes overlapped with ensure window",
-            PREFETCH_ENSURE_MEMORY_RATIO_QUERY,
-            "prefetch_ensure_memory_ratio",
-        ),
-        (
-            "QUERY 1f: PREFETCH wait/ensure breakdown (NVTX durations)",
-            PREFETCH_WAIT_BREAKDOWN_QUERY,
-            "prefetch_wait_breakdown",
-        ),
-        (
-            "QUERY 1g: mock communication timing markers (NVTX durations)",
-            MOCK_COMM_TIMING_QUERY,
-            "mock_comm_timing",
-        ),
-        (
-            "QUERY 2: mock D2H DURING vs WITHOUT prefetch H2D overlap",
-            MOCK_D2H_OVERLAP_QUERY,
-            "mock_d2h_overlap",
-        ),
-        (
-            "QUERY 2a: mock D2H overlap ratio summary",
-            MOCK_D2H_OVERLAP_RATIO_QUERY,
-            "mock_d2h_overlap_ratio",
-        ),
-        (
-            "QUERY 2b: mock D2H vs prefetch ordering",
-            MOCK_D2H_PREFETCH_ORDER_QUERY,
-            "mock_d2h_prefetch_order",
-        ),
-        ("QUERY 3: NCCL KERNEL TIMING (denoising window)", NCCL_QUERY, "nccl"),
-        (
-            "QUERY 4: H2D BANDWIDTH TIMELINE (per-second, denoising window)",
-            H2D_TIMELINE_QUERY,
-            "h2d_timeline",
-        ),
-        (
-            "QUERY 4a: DENOISING step duration (per-step NVTX)",
-            DENOISING_STEP_DURATION_QUERY,
-            "denoising_step_duration",
-        ),
-        (
-            "QUERY 4b: DENOISING step component split (compute/mock_comm/ensure_wait)",
-            DENOISING_STEP_COMPONENT_QUERY,
-            "denoising_step_components",
-        ),
-        (
-            "QUERY 5: GPU IDLE GAPS (>1ms, denoising window)",
-            IDLE_GAPS_QUERY,
-            "idle_gaps",
-        ),
-        (
-            "QUERY 5a: GPU IDLE gap attribution (prefetch/mock/none)",
-            IDLE_GAP_BREAKDOWN_QUERY,
-            "idle_gap_breakdown",
-        ),
-        (
-            "QUERY 5b: LARGEST GPU IDLE GAPS (>100ms, device 0, denoising window)",
-            LARGE_GAPS_QUERY,
-            "large_gaps",
-        ),
-    ]
+    if comm_mode == "mock":
+        base_queries = [
+            (
+                "QUERY 2: mock D2H DURING vs WITHOUT prefetch H2D overlap",
+                MOCK_D2H_OVERLAP_QUERY,
+                "comm_overlap",
+            ),
+            (
+                "QUERY 2a: mock D2H overlap ratio summary",
+                MOCK_D2H_OVERLAP_RATIO_QUERY,
+                "comm_overlap_ratio",
+            ),
+            (
+                "QUERY 4a: DENOISING step duration (per-step NVTX)",
+                DENOISING_STEP_DURATION_QUERY,
+                "denoising_step_duration",
+            ),
+            (
+                "QUERY 4b: DENOISING step component split (step_total/mock_comm)",
+                MOCK_DENOISING_STEP_COMPONENT_QUERY,
+                "denoising_step_components",
+            ),
+        ]
+    else:
+        base_queries = [
+            (
+                "QUERY 2: NCCL communication DURING vs WITHOUT prefetch H2D overlap",
+                REAL_COMM_OVERLAP_QUERY,
+                "comm_overlap",
+            ),
+            (
+                "QUERY 2a: NCCL communication overlap ratio summary",
+                REAL_COMM_OVERLAP_RATIO_QUERY,
+                "comm_overlap_ratio",
+            ),
+            (
+                "QUERY 4a: DENOISING step duration (per-step NVTX)",
+                DENOISING_STEP_DURATION_QUERY,
+                "denoising_step_duration",
+            ),
+            (
+                "QUERY 4b: DENOISING step component split (step_total/real_comm)",
+                REAL_DENOISING_STEP_COMPONENT_QUERY,
+                "denoising_step_components",
+            ),
+        ]
 
     total_t0 = time.time()
     prefetch_min_mb = float(os.getenv("SGLANG_NSYS_PREFETCH_MIN_MB", "1.0"))
@@ -1577,73 +1875,21 @@ def main():
 
         new_params = None
         old_params = None
-        if prefix in {
-            "h2d_buckets",
-            "prefetch_h2d_stats",
-            "prefetch_mode_breakdown",
-            "prefetch_ensure_memory_ratio",
+        if comm_mode == "mock" and prefix in {
+            "comm_overlap",
+            "comm_overlap_ratio",
         }:
+            new_params = {
+                "mock_bytes": db_info[new_db]["bytes"] or -1,
+                "prefetch_min_bytes": prefetch_min_bytes,
+            }
+            old_params = {
+                "mock_bytes": db_info[old_db]["bytes"] or -1,
+                "prefetch_min_bytes": prefetch_min_bytes,
+            }
+        elif prefix in {"comm_overlap", "comm_overlap_ratio"}:
             new_params = {"prefetch_min_bytes": prefetch_min_bytes}
             old_params = {"prefetch_min_bytes": prefetch_min_bytes}
-        elif prefix in {
-            "mock_d2h_overlap",
-            "mock_d2h_overlap_ratio",
-            "mock_d2h_prefetch_order",
-        }:
-            new_params = {
-                "mock_bytes": db_info[new_db]["bytes"] or -1,
-                "prefetch_min_bytes": prefetch_min_bytes,
-            }
-            old_params = {
-                "mock_bytes": db_info[old_db]["bytes"] or -1,
-                "prefetch_min_bytes": prefetch_min_bytes,
-            }
-        elif prefix == "idle_gap_breakdown":
-            new_params = {
-                "mock_bytes": db_info[new_db]["bytes"] or -1,
-                "prefetch_min_bytes": prefetch_min_bytes,
-            }
-            old_params = {
-                "mock_bytes": db_info[old_db]["bytes"] or -1,
-                "prefetch_min_bytes": prefetch_min_bytes,
-            }
-        elif prefix == "large_gaps":
-            gap_threshold_ns = int(
-                float(os.getenv("SGLANG_NSYS_LARGE_GAP_THRESHOLD_MS", "100.0")) * 1e6
-            )
-            topk = int(os.getenv("SGLANG_NSYS_LARGE_GAP_TOPK", "20"))
-            new_params = {"gap_threshold_ns": gap_threshold_ns, "topk": topk}
-            old_params = {"gap_threshold_ns": gap_threshold_ns, "topk": topk}
-
-            # Without denoising markers this query scans the full trace and can be very slow.
-            # Default: skip in that case unless explicitly enabled.
-            allow_full_trace = os.getenv(
-                "SGLANG_NSYS_RUN_LARGE_GAPS_WITHOUT_DENOISE", "0"
-            ).strip().lower() in {"1", "true", "yes", "on"}
-            if not allow_full_trace:
-                if db_info[new_db]["denoise_windows"] <= 0:
-                    log(
-                        "  Skip New large_gaps (missing SGL_DENOISING_LOOP; "
-                        "set SGLANG_NSYS_RUN_LARGE_GAPS_WITHOUT_DENOISE=1 to force)."
-                    )
-                    with open(
-                        os.path.join(output_dir, "large_gaps_new.csv"), "w", newline=""
-                    ) as f:
-                        writer = csv.writer(f)
-                        writer.writerow(["deviceId", "gap_ms", "before_kernel", "after_kernel"])
-                if db_info[old_db]["denoise_windows"] <= 0:
-                    log(
-                        "  Skip Old large_gaps (missing SGL_DENOISING_LOOP; "
-                        "set SGLANG_NSYS_RUN_LARGE_GAPS_WITHOUT_DENOISE=1 to force)."
-                    )
-                    with open(
-                        os.path.join(output_dir, "large_gaps_old.csv"), "w", newline=""
-                    ) as f:
-                        writer = csv.writer(f)
-                        writer.writerow(["deviceId", "gap_ms", "before_kernel", "after_kernel"])
-                if db_info[new_db]["denoise_windows"] <= 0 and db_info[old_db]["denoise_windows"] <= 0:
-                    continue
-
         run_query(
             new_db,
             query,
@@ -1664,22 +1910,12 @@ def main():
     log(f"{'=' * 72}")
     log(f"\n  Total query time: {time.time() - total_t0:.1f}s")
     log(f"  Output directory: {output_dir}/")
+    log(f"  Communication mode: {comm_mode}")
     log("  Key files:")
-    log("    mock_d2h_overlap_*.csv             -- mock D2H during vs without prefetch H2D")
-    log("    mock_d2h_overlap_ratio_*.csv       -- overlap ratio + duration/BW split")
-    log("    mock_d2h_prefetch_order_*.csv      -- whether prefetch happens before/after mock")
-    log("    prefetch_h2d_stats_*.csv           -- prefetch copy granularity/efficiency")
-    log("    prefetch_mode_breakdown_*.csv      -- background vs sync-catchup copy split")
-    log("    prefetch_ensure_memory_ratio_*.csv -- prefetch bytes inside ensure windows")
-    log("    prefetch_wait_breakdown_*.csv      -- wait_comm / ensure_ready duration split")
-    log("    mock_comm_timing_*.csv             -- mock launch window vs active window")
-    log("    mock_d2h_signature_*.csv          -- detected mock D2H bytes signature")
-    log("    h2d_new.csv / h2d_old.csv         -- Overall H2D statistics (denoise window)")
-    log("    d2h_new.csv / d2h_old.csv         -- Overall D2H statistics (denoise window)")
+    log("    comm_overlap_*.csv                -- communication during vs without prefetch H2D")
+    log("    comm_overlap_ratio_*.csv          -- overlap ratio + duration split")
     log("    denoising_step_duration_*.csv     -- per denoising-step duration")
-    log("    denoising_step_components_*.csv   -- per-step compute/mock_comm/ensure split")
-    log("    idle_gap_breakdown_*.csv          -- idle attribution (prefetch/mock/none)")
-    log("    idle_gaps_new.csv / idle_gaps_old.csv -- GPU idle gaps (denoise window)")
+    log("    denoising_step_components_*.csv   -- per-step step_total/comm split")
 
 
 if __name__ == "__main__":

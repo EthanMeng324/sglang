@@ -55,6 +55,7 @@ class RequestMetrics:
         self.total_duration_ms: float = 0.0
         # memory tracking: {checkpoint_name: MemorySnapshot}
         self.memory_snapshots: Dict[str, MemorySnapshot] = {}
+        self.extra: Dict[str, Any] = {}
 
     @property
     def total_duration_s(self) -> float:
@@ -72,6 +73,9 @@ class RequestMetrics:
     def record_memory_snapshot(self, checkpoint_name: str, snapshot: MemorySnapshot):
         self.memory_snapshots[checkpoint_name] = snapshot
 
+    def record_extra(self, key: str, value: Any):
+        self.extra[key] = value
+
     def to_dict(self) -> Dict[str, Any]:
         """Serializes the metrics data to a dictionary."""
         return {
@@ -83,6 +87,7 @@ class RequestMetrics:
                 name: snapshot.to_dict()
                 for name, snapshot in self.memory_snapshots.items()
             },
+            "extra": self.extra,
         }
 
 
@@ -308,6 +313,7 @@ class PerformanceLogger:
             "steps": formatted_steps,
             "denoise_steps_ms": denoise_steps_ms,
             "memory_checkpoints": memory_checkpoints,
+            "extra": metrics.extra,
             "meta": meta or {},
         }
 

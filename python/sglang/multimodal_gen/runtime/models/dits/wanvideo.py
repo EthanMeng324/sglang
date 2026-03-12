@@ -90,6 +90,12 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+@torch.compiler.disable
+def _set_forward_context_comm_tracker(forward_context, tracker) -> None:
+    if getattr(forward_context, "comm_activity_tracker", None) is not tracker:
+        forward_context.comm_activity_tracker = tracker
+
+
 class WanImageEmbedding(torch.nn.Module):
 
     def __init__(self, in_features: int, out_features: int):
@@ -1072,7 +1078,11 @@ class WanTransformer3DModel(CachableDiT, OffloadableDiTMixin):
         guidance=None,
         **kwargs,
     ) -> torch.Tensor:
-        forward_batch = get_forward_context().forward_batch
+        forward_context = get_forward_context()
+        tracker = getattr(self, "comm_activity_tracker", None)
+        _set_forward_context_comm_tracker(forward_context, tracker)
+
+        forward_batch = forward_context.forward_batch
         if forward_batch is not None:
             sequence_shard_enabled = (
                 forward_batch.enable_sequence_shard and self.sp_size > 1

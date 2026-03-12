@@ -7,6 +7,7 @@ import torch
 import torch.distributed._functional_collectives as ft_c
 from torch.distributed.tensor.experimental._attention import _cp_options
 
+from sglang.multimodal_gen.runtime.managers.forward_context import get_forward_context
 from sglang.multimodal_gen.runtime.distributed.parallel_state import (
     get_sp_group,
     get_ulysses_parallel_world_size,
@@ -23,6 +24,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+@torch.compiler.disable
+def _get_comm_activity_tracker():
+    try:
+        return getattr(get_forward_context(), "comm_activity_tracker", None)
+    except Exception:
+        return None
+
+
+@torch.compiler.disable
+def _mark_comm_start(tracker, tag: str) -> None:
+    if tracker is not None:
+        tracker.mark_start(tag)
+
+
+@torch.compiler.disable
+def _mark_comm_end(tracker, tag: str) -> None:
+    if tracker is not None:
+        tracker.mark_end(tag)
+
+
 def _maybe_wait(tensor: torch.Tensor) -> torch.Tensor:
     """
     When tracing the code, the result tensor is not an AsyncCollectiveTensor,
@@ -33,17 +54,22 @@ def _maybe_wait(tensor: torch.Tensor) -> torch.Tensor:
     return tensor
 
 
-def _usp_all_to_all_single(x: torch.Tensor) -> torch.Tensor:
+def _usp_all_to_all_single(x: torch.Tensor, tag: str) -> torch.Tensor:
     ulysses_pg = get_sp_group().ulysses_group
     assert ulysses_pg is not None, "Ulysses process group is not initialized."
     x_shape = x.shape
     x = x.flatten()
-    x = ft_c.all_to_all_single(
-        x, output_split_sizes=None, input_split_sizes=None, group=ulysses_pg
-    )
-    x = _maybe_wait(x)
-    x = x.reshape(x_shape)
-    return x
+    tracker = _get_comm_activity_tracker()
+    _mark_comm_start(tracker, tag)
+    try:
+        x = ft_c.all_to_all_single(
+            x, output_split_sizes=None, input_split_sizes=None, group=ulysses_pg
+        )
+        x = _maybe_wait(x)
+        x = x.reshape(x_shape)
+        return x
+    finally:
+        _mark_comm_end(tracker, tag)
 
 
 def _usp_input_all_to_all(x: torch.Tensor, head_dim: int = 1) -> torch.Tensor:
@@ -86,7 +112,7 @@ def _usp_input_all_to_all(x: torch.Tensor, head_dim: int = 1) -> torch.Tensor:
     # [b, h, s_local, d] -> [h, b, s_local, d]
     x_c = x_c.permute(1, 0, 2, 3).contiguous()
     # all-to-all along h
-    x_c = _usp_all_to_all_single(x_c)
+    x_c = _usp_all_to_all_single(x_c, tag="usp_input_all_to_all")
     # -> [b, h_local, s, d]
     x_c = (
         x_c.reshape(world_size, h // world_size, b, -1, d)
@@ -143,7 +169,7 @@ def _usp_output_all_to_all(x: torch.Tensor, head_dim: int = 1) -> torch.Tensor:
 
     # [b, h_local, s, d] -> [s, b, h_local, d]
     x_c = x_c.permute(2, 0, 1, 3).contiguous()
-    x_c = _usp_all_to_all_single(x_c)
+    x_c = _usp_all_to_all_single(x_c, tag="usp_output_all_to_all")
     # -> [b, h, s_local, d]
     x_c = (
         x_c.reshape(world_size, s // world_size, b, -1, d)

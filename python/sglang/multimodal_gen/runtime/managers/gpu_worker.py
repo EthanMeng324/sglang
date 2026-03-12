@@ -205,6 +205,37 @@ class GPUWorker:
             f"Related offload server args to disable: {suggested_args_str}"
         )
 
+    def _collect_offload_profile_metrics(self) -> dict | None:
+        if self.pipeline is None:
+            return None
+
+        merged: dict[str, list[float]] = {}
+        for module_name in ("transformer", "transformer_2", "video_dit", "audio_dit"):
+            module = self.pipeline.get_module(module_name)
+            collect_fn = getattr(module, "collect_offload_profile_metrics", None)
+            if not callable(collect_fn):
+                continue
+
+            data = collect_fn()
+            if not data:
+                continue
+
+            for key, values in data.items():
+                if not isinstance(values, list):
+                    continue
+                if key not in merged:
+                    merged[key] = [0.0] * len(values)
+                if len(merged[key]) < len(values):
+                    merged[key].extend([0.0] * (len(values) - len(merged[key])))
+                for idx, value in enumerate(values):
+                    merged[key][idx] += float(value)
+
+        if not merged:
+            return None
+
+        merged["source"] = "runtime_cuda_events"
+        return merged
+
     def execute_forward(self, batch: List[Req]) -> OutputBatch:
         """
         Execute a forward pass.
@@ -252,6 +283,9 @@ class GPUWorker:
 
             duration_ms = (time.monotonic() - start_time) * 1000
             output_batch.metrics.total_duration_ms = duration_ms
+            offload_profile = self._collect_offload_profile_metrics()
+            if output_batch.metrics and offload_profile:
+                output_batch.metrics.record_extra("offload_profile", offload_profile)
 
             # Save output to file and return file path only if requested. Avoid the serialization
             # and deserialization overhead between scheduler_client and gpu_worker.

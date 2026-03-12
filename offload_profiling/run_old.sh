@@ -52,7 +52,7 @@ ULYSSES_DEGREE="${ULYSSES_DEGREE:-1}"
 ATTENTION_BACKEND="${ATTENTION_BACKEND:-sage_attn}"
 NSYS_OUTPUT_PREFIX="${NSYS_OUTPUT_PREFIX:-$PROFILES_DIR/old_offload_nsys}"
 VIDEO_OUT="${VIDEO_OUT:-$RESULTS_DIR/nsys_old_offload_profiled.mp4}"
-PERF_OUT="${PERF_OUT:-$RESULTS_DIR/perf_old_offload_profiled.json}"
+PERF_OUT="${PERF_OUT:-$PROFILES_DIR/perf_old_offload_profiled.json}"
 
 # Common generation flags
 COMMON_FLAGS=(

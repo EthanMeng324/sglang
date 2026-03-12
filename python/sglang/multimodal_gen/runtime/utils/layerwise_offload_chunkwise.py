@@ -95,6 +95,10 @@ class LayerwiseOffloadManager:
 
         # layer_idx -> event recorded on copy stream when prefetch completes
         self._prefetch_events: Dict[int, torch.cuda.Event] = {}
+        # layer_idx -> [(chunk_done_event, chunk_nbytes)]
+        self._prefetch_chunk_events: Dict[
+            int, List[Tuple[torch.cuda.Event, int]]
+        ] = {}
         # GPU resident layers
         self._gpu_layers: Set[int] = set()
 
@@ -112,6 +116,7 @@ class LayerwiseOffloadManager:
         self._worker_thread: threading.Thread | None = None
         self._worker_stop_event = threading.Event()
         self._worker_wakeup_event = threading.Event()
+        self._logical_step_idx: int | None = None
 
         # Per-step lightweight diagnostics kept from chunkwise profiling.
         self._step_seq = 0
@@ -128,6 +133,10 @@ class LayerwiseOffloadManager:
         self._step_ensure_ready_s = 0.0
         self._step_unique_loaded_bytes = 0
         self._step_unique_loaded_layers: Set[int] = set()
+        self._prefetch_cp_wait_pairs: List[
+            Tuple[int, int, torch.cuda.Event, torch.cuda.Event]
+        ] = []
+        self._prefetch_wait_byte_records: List[Tuple[int, int, int]] = []
 
         self._initialize()
 
@@ -195,6 +204,146 @@ class LayerwiseOffloadManager:
             if not self._step_active:
                 return
             self._step_ensure_ready_s += float(dur_s)
+
+    @torch.compiler.disable
+    def _current_profile_step_idx(self) -> int:
+        if self._logical_step_idx is not None:
+            return self._logical_step_idx
+        return max(0, self._step_seq - 1)
+
+    @torch.compiler.disable
+    def set_logical_step_idx(self, step_idx: int | None) -> None:
+        self._logical_step_idx = step_idx
+
+    @torch.compiler.disable
+    def _record_prefetch_cp_wait_start(self) -> torch.cuda.Event | None:
+        if not self.enabled:
+            return None
+        event = torch.cuda.Event(enable_timing=True)
+        event.record(torch.cuda.current_stream())
+        return event
+
+    @torch.compiler.disable
+    def _record_prefetch_cp_wait_end(
+        self, step_idx: int, layer_idx: int, start_event: torch.cuda.Event | None
+    ) -> None:
+        if not self.enabled or start_event is None:
+            return
+        end_event = torch.cuda.Event(enable_timing=True)
+        end_event.record(torch.cuda.current_stream())
+        self._prefetch_cp_wait_pairs.append(
+            (step_idx, layer_idx, start_event, end_event)
+        )
+
+    @torch.compiler.disable
+    def _estimate_waited_prefetch_bytes(self, layer_idx: int) -> Tuple[int, int]:
+        total_bytes = int(self._layer_total_bytes.get(layer_idx, 0))
+        if total_bytes <= 0:
+            return 0, 0
+
+        with self._state_lock:
+            if layer_idx in self._gpu_layers:
+                ready_event = self._prefetch_events.get(layer_idx)
+                if ready_event is None or ready_event.query():
+                    return 0, total_bytes
+            chunk_events = list(self._prefetch_chunk_events.get(layer_idx, []))
+            layer_known = layer_idx in self._consolidated_cpu_weights
+
+        if not layer_known:
+            return 0, 0
+        if not chunk_events:
+            return total_bytes, total_bytes
+
+        completed_bytes = 0
+        for event, nbytes in chunk_events:
+            try:
+                if event.query():
+                    completed_bytes += int(nbytes)
+            except Exception:
+                continue
+
+        waited_bytes = max(0, total_bytes - completed_bytes)
+        return waited_bytes, total_bytes
+
+    @torch.compiler.disable
+    def _record_waited_prefetch_bytes(
+        self, step_idx: int, waited_bytes: int, total_bytes: int
+    ) -> None:
+        if total_bytes <= 0:
+            return
+        self._prefetch_wait_byte_records.append(
+            (step_idx, int(max(0, waited_bytes)), int(max(0, total_bytes)))
+        )
+
+    @torch.compiler.disable
+    def collect_profile_metrics(self) -> Dict[str, List[float]]:
+        if not self.enabled or self.device is None:
+            return {}
+        if self._prefetch_cp_wait_pairs:
+            torch.cuda.synchronize(self.device)
+
+        per_step_ms: Dict[int, float] = {}
+        per_step_layers: Dict[int, float] = {}
+        per_step_waited_bytes: Dict[int, float] = {}
+        per_step_total_bytes: Dict[int, float] = {}
+        event_errors = 0
+        for step_idx, _layer_idx, start_event, end_event in self._prefetch_cp_wait_pairs:
+            try:
+                wait_ms = max(0.0, float(start_event.elapsed_time(end_event)))
+            except Exception:
+                event_errors += 1
+                continue
+            per_step_ms[step_idx] = per_step_ms.get(step_idx, 0.0) + wait_ms
+            if wait_ms > 0.01:
+                per_step_layers[step_idx] = per_step_layers.get(step_idx, 0.0) + 1.0
+        for step_idx, waited_bytes, total_bytes in self._prefetch_wait_byte_records:
+            per_step_waited_bytes[step_idx] = (
+                per_step_waited_bytes.get(step_idx, 0.0) + float(waited_bytes)
+            )
+            per_step_total_bytes[step_idx] = (
+                per_step_total_bytes.get(step_idx, 0.0) + float(total_bytes)
+            )
+
+        max_step = max(
+            [-1]
+            + list(per_step_ms.keys())
+            + list(per_step_layers.keys())
+            + list(per_step_waited_bytes.keys())
+            + list(per_step_total_bytes.keys())
+        )
+        if max_step < 0:
+            return {}
+
+        wait_ms_list = [0.0] * (max_step + 1)
+        wait_layers_list = [0.0] * (max_step + 1)
+        waited_bytes_list = [0.0] * (max_step + 1)
+        total_bytes_list = [0.0] * (max_step + 1)
+        for step_idx, value in per_step_ms.items():
+            wait_ms_list[step_idx] = value
+        for step_idx, value in per_step_layers.items():
+            wait_layers_list[step_idx] = value
+        for step_idx, value in per_step_waited_bytes.items():
+            waited_bytes_list[step_idx] = value
+        for step_idx, value in per_step_total_bytes.items():
+            total_bytes_list[step_idx] = value
+
+        if self._prefetch_wait_byte_records and not self._prefetch_cp_wait_pairs:
+            logger.warning(
+                "Chunkwise offload profiling captured waited-byte records but no CUDA "
+                "event pairs; exporting zero-filled prefetch_critical_path_wait_ms."
+            )
+        elif event_errors > 0:
+            logger.warning(
+                "Chunkwise offload profiling dropped %d invalid CUDA event pairs.",
+                event_errors,
+            )
+
+        return {
+            "prefetch_critical_path_wait_ms": wait_ms_list,
+            "prefetch_critical_path_wait_layers": wait_layers_list,
+            "prefetch_critical_path_waited_bytes": waited_bytes_list,
+            "prefetch_critical_path_total_bytes": total_bytes_list,
+        }
 
     def _end_step_stats(self) -> None:
         with self._state_lock:
@@ -454,6 +603,8 @@ class LayerwiseOffloadManager:
                 with torch.cuda.stream(self.copy_stream):
                     # Intentionally blocking per chunk for strict comm-aware checkpoints.
                     dst.copy_(src, non_blocking=False)
+                    chunk_done_event = torch.cuda.Event()
+                    chunk_done_event.record(self.copy_stream)
                 copy_dur_s = time.perf_counter() - copy_t0
             finally:
                 if push_nvtx:
@@ -463,6 +614,9 @@ class LayerwiseOffloadManager:
             self._record_copy_stats(background=background, nbytes=nbytes, dur_s=copy_dur_s)
 
             with self._state_lock:
+                self._prefetch_chunk_events.setdefault(layer_idx, []).append(
+                    (chunk_done_event, int(nbytes))
+                )
                 if layer_idx not in self._prefetch_offsets:
                     return True
 
@@ -698,6 +852,7 @@ class LayerwiseOffloadManager:
                 target.data = torch.empty((1,), device=self.device, dtype=meta["dtype"])
 
             self._prefetch_events.pop(layer_idx, None)
+            self._prefetch_chunk_events.pop(layer_idx, None)
             self._prefetch_gpu_buffers.pop(layer_idx, None)
             self._prefetch_offsets.pop(layer_idx, None)
             self._scheduled_layers.discard(layer_idx)
@@ -832,10 +987,18 @@ class LayerwiseOffloadManager:
                     # Keep this async to avoid main-thread prefetch catch-up.
                     self.prepare_for_next_req(non_blocking=True)
 
+                step_idx = self._current_profile_step_idx()
+                waited_bytes, total_bytes = self._estimate_waited_prefetch_bytes(i)
+                self._record_waited_prefetch_bytes(
+                    step_idx, waited_bytes, total_bytes
+                )
+                wait_start = self._record_prefetch_cp_wait_start()
+
                 # Start async prefetch as early as possible in pre-hook.
                 self.prefetch_layer(i, non_blocking=True)
                 self._schedule_prefetch_window(i)
                 self._ensure_layer_ready(i)
+                self._record_prefetch_cp_wait_end(step_idx, i, wait_start)
 
             return hook
 
@@ -975,6 +1138,31 @@ class OffloadableDiTMixin:
                 manager.sync_all_layers_to_cpu()
                 manager.release_all()
                 manager.register_forward_hooks()
+
+    def set_offload_profile_step_idx(self, step_idx: int | None) -> None:
+        if self.layerwise_offload_managers is None:
+            return
+        for manager in self.layerwise_offload_managers:
+            if manager.enabled:
+                manager.set_logical_step_idx(step_idx)
+
+    def collect_offload_profile_metrics(self) -> Dict[str, Any]:
+        if not self.layerwise_offload_managers:
+            return {}
+
+        merged: Dict[str, List[float]] = {}
+        for manager in self.layerwise_offload_managers:
+            if not manager.enabled:
+                continue
+            data = manager.collect_profile_metrics()
+            for key, values in data.items():
+                if key not in merged:
+                    merged[key] = [0.0] * len(values)
+                if len(merged[key]) < len(values):
+                    merged[key].extend([0.0] * (len(values) - len(merged[key])))
+                for idx, value in enumerate(values):
+                    merged[key][idx] += value
+        return merged
 
 
 def iter_materialized_weights(module: torch.nn.Module):

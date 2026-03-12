@@ -8,8 +8,24 @@ ANALYSIS_DIR="${ANALYSIS_DIR:-$PROFILES_DIR/analysis}"
 
 NEW_NSYS="${NEW_NSYS:-$PROFILES_DIR/new_offload_nsys.nsys-rep}"
 OLD_NSYS="${OLD_NSYS:-$PROFILES_DIR/old_offload_nsys.nsys-rep}"
+COMM_MODE="${1:-${COMM_MODE:-}}"
+
+if [[ -z "$COMM_MODE" ]]; then
+    if [[ "${SGLANG_WAN_MOCK_COMM_ENABLE:-1}" == "1" ]]; then
+        COMM_MODE="mock"
+    else
+        COMM_MODE="real"
+    fi
+fi
+
+if [[ "$COMM_MODE" != "mock" && "$COMM_MODE" != "real" ]]; then
+    echo "ERROR: unsupported comm mode '$COMM_MODE' (expected: mock or real)"
+    echo "Usage: $0 [mock|real]"
+    exit 1
+fi
 
 mkdir -p "$ANALYSIS_DIR"
+rm -f "$ANALYSIS_DIR"/*.csv "$ANALYSIS_DIR"/analysis_summary.md
 
 if ! command -v nsys >/dev/null 2>&1; then
     echo "ERROR: nsys not found in PATH."
@@ -66,14 +82,16 @@ echo "=========================================="
 echo "new: $NEW_NSYS"
 echo "old: $OLD_NSYS"
 echo "out: $ANALYSIS_DIR"
+echo "comm mode: $COMM_MODE"
 echo ""
 
 NEW_DB="$(export_to_sqlite "$NEW_NSYS")"
 OLD_DB="$(export_to_sqlite "$OLD_NSYS")"
 
-python3 "$SCRIPT_DIR/nsys_query.py" "$NEW_DB" "$OLD_DB" "$ANALYSIS_DIR"
+python3 "$SCRIPT_DIR/nsys_query.py" "$NEW_DB" "$OLD_DB" "$ANALYSIS_DIR" "$COMM_MODE"
 python3 "$SCRIPT_DIR/summarize_nsys_csv.py" \
     --analysis-dir "$ANALYSIS_DIR" \
+    --comm-mode "$COMM_MODE" \
     --output "$ANALYSIS_DIR/analysis_summary.md"
 
 echo ""
