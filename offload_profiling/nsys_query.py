@@ -257,8 +257,10 @@ prefetch_marked_streams AS (
                 'SGL_PREFETCH_H2D_CHUNK'
           )
             AND n.end IS NOT NULL
-            AND n.start < m.end
-            AND n.end > m.start
+            AND (
+                (n.start < m.end AND n.end > m.start)
+                OR (m.start >= n.start AND m.start <= n.end + :prefetch_marker_slack_ns)
+            )
       )
 ),
 prefetch_streams AS (
@@ -333,8 +335,10 @@ prefetch_marked_streams AS (
                 'SGL_PREFETCH_H2D_CHUNK'
           )
             AND n.end IS NOT NULL
-            AND n.start < m.end
-            AND n.end > m.start
+            AND (
+                (n.start < m.end AND n.end > m.start)
+                OR (m.start >= n.start AND m.start <= n.end + :prefetch_marker_slack_ns)
+            )
       )
 ),
 prefetch_streams AS (
@@ -865,8 +869,10 @@ prefetch_marked_streams AS (
                 'SGL_PREFETCH_H2D_CHUNK'
           )
             AND n.end IS NOT NULL
-            AND n.start < m.end
-            AND n.end > m.start
+            AND (
+                (n.start < m.end AND n.end > m.start)
+                OR (m.start >= n.start AND m.start <= n.end + :prefetch_marker_slack_ns)
+            )
       )
 ),
 prefetch_h2d AS (
@@ -966,8 +972,10 @@ prefetch_marked_streams AS (
                 'SGL_PREFETCH_H2D_CHUNK'
           )
             AND n.end IS NOT NULL
-            AND n.start < m.end
-            AND n.end > m.start
+            AND (
+                (n.start < m.end AND n.end > m.start)
+                OR (m.start >= n.start AND m.start <= n.end + :prefetch_marker_slack_ns)
+            )
       )
 ),
 prefetch_h2d AS (
@@ -1797,7 +1805,12 @@ def main():
     total_t0 = time.time()
     prefetch_min_mb = float(os.getenv("SGLANG_NSYS_PREFETCH_MIN_MB", "1.0"))
     prefetch_min_bytes = max(1, int(prefetch_min_mb * 1024 * 1024))
+    prefetch_marker_slack_ns = int(1_000_000)
     log(f"  Using prefetch event threshold: >= {prefetch_min_mb:.3f} MB")
+    log(
+        "  Using prefetch marker launch slack: "
+        f"{prefetch_marker_slack_ns / 1e6:.3f} ms"
+    )
 
     for title, query, prefix in base_queries:
         log(f"\n{'=' * 72}")
@@ -1813,9 +1826,13 @@ def main():
                 params = {
                     "mock_bytes": db_info[db]["bytes"] or -1,
                     "prefetch_min_bytes": prefetch_min_bytes,
+                    "prefetch_marker_slack_ns": prefetch_marker_slack_ns,
                 }
             elif prefix in {"comm_overlap", "comm_overlap_ratio"}:
-                params = {"prefetch_min_bytes": prefetch_min_bytes}
+                params = {
+                    "prefetch_min_bytes": prefetch_min_bytes,
+                    "prefetch_marker_slack_ns": prefetch_marker_slack_ns,
+                }
 
             run_query(
                 db,
