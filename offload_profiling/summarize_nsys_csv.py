@@ -347,9 +347,13 @@ def build_summary(analysis_dir: Path, comm_mode: str) -> str:
         )
     )
     if comm_mode == "mock":
-        lines.append("- 通信时长来源: `denoising_step_components_*.csv` 中的 `comm_ms`（mock D2H）。")
+        lines.append(
+            "- 通信时长来源: `denoising_step_components_*.csv` 中的 `comm_ms`（mock D2H 在单 device 上做时间并集后的每步时长）。"
+        )
     else:
-        lines.append("- 通信时长来源: `denoising_step_components_*.csv` 中的 `comm_ms`（按 NCCL kernels 统计）。")
+        lines.append(
+            "- 通信时长来源: `denoising_step_components_*.csv` 中的 `comm_ms`（每步先在单个 device 上对 NCCL 时间做并集，再取各 device 最大值，近似通信 critical path）。"
+        )
     lines.append(
         "- prefetch critical-path wait 来源: "
         + ", ".join(

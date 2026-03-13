@@ -875,12 +875,46 @@ prefetch_marked_streams AS (
             )
       )
 ),
+prefetch_marker_ranges AS (
+    SELECT n.start, n.end
+    FROM NVTX_EVENTS n
+    WHERE n.text IN (
+            'SGL_PREFETCH_H2D',
+            'SGL_PREFETCH_H2D_BG',
+            'SGL_PREFETCH_H2D_SYNC',
+            'SGL_PREFETCH_H2D_CHUNK'
+        )
+      AND n.end IS NOT NULL
+),
+prefetch_streams AS (
+    SELECT streamId FROM prefetch_marked_streams
+    UNION
+    SELECT streamId
+    FROM (
+        SELECT m.streamId
+        FROM CUPTI_ACTIVITY_KIND_MEMCPY m
+        WHERE m.copyKind = 1
+          AND m.bytes >= :prefetch_min_bytes
+          AND (
+                (SELECT COUNT(*) FROM denoise_windows) = 0
+                OR EXISTS (
+                    SELECT 1 FROM denoise_windows d
+                    WHERE d.start < m.end AND d.end > m.start
+                )
+          )
+        GROUP BY m.streamId
+        ORDER BY COUNT(*) DESC, SUM(m.bytes) DESC
+        LIMIT 1
+    )
+    WHERE EXISTS (SELECT 1 FROM prefetch_marker_ranges)
+      AND NOT EXISTS (SELECT 1 FROM prefetch_marked_streams)
+),
 prefetch_h2d AS (
     SELECT m.start, m.end, m.deviceId
     FROM CUPTI_ACTIVITY_KIND_MEMCPY m
     WHERE m.copyKind = 1
       AND m.bytes >= :prefetch_min_bytes
-      AND m.streamId IN (SELECT streamId FROM prefetch_marked_streams)
+      AND m.streamId IN (SELECT streamId FROM prefetch_streams)
       AND (
             (SELECT COUNT(*) FROM denoise_windows) = 0
             OR EXISTS (
@@ -978,12 +1012,46 @@ prefetch_marked_streams AS (
             )
       )
 ),
+prefetch_marker_ranges AS (
+    SELECT n.start, n.end
+    FROM NVTX_EVENTS n
+    WHERE n.text IN (
+            'SGL_PREFETCH_H2D',
+            'SGL_PREFETCH_H2D_BG',
+            'SGL_PREFETCH_H2D_SYNC',
+            'SGL_PREFETCH_H2D_CHUNK'
+        )
+      AND n.end IS NOT NULL
+),
+prefetch_streams AS (
+    SELECT streamId FROM prefetch_marked_streams
+    UNION
+    SELECT streamId
+    FROM (
+        SELECT m.streamId
+        FROM CUPTI_ACTIVITY_KIND_MEMCPY m
+        WHERE m.copyKind = 1
+          AND m.bytes >= :prefetch_min_bytes
+          AND (
+                (SELECT COUNT(*) FROM denoise_windows) = 0
+                OR EXISTS (
+                    SELECT 1 FROM denoise_windows d
+                    WHERE d.start < m.end AND d.end > m.start
+                )
+          )
+        GROUP BY m.streamId
+        ORDER BY COUNT(*) DESC, SUM(m.bytes) DESC
+        LIMIT 1
+    )
+    WHERE EXISTS (SELECT 1 FROM prefetch_marker_ranges)
+      AND NOT EXISTS (SELECT 1 FROM prefetch_marked_streams)
+),
 prefetch_h2d AS (
     SELECT m.start, m.end, m.deviceId
     FROM CUPTI_ACTIVITY_KIND_MEMCPY m
     WHERE m.copyKind = 1
       AND m.bytes >= :prefetch_min_bytes
-      AND m.streamId IN (SELECT streamId FROM prefetch_marked_streams)
+      AND m.streamId IN (SELECT streamId FROM prefetch_streams)
       AND (
             (SELECT COUNT(*) FROM denoise_windows) = 0
             OR EXISTS (
@@ -1296,17 +1364,71 @@ ensure_ranges AS (
     WHERE n.end IS NOT NULL
       AND n.text = 'SGL_PREFETCH_ENSURE_READY'
 ),
-step_comm AS (
+step_comm_intervals AS (
     SELECT
         s.step_idx,
-        SUM(
-            (MIN(s.step_end, c.end) - MAX(s.step_start, c.start)) / 1e6
-        ) as comm_ms
+        0 as deviceId,
+        MAX(s.step_start, c.start) as start_ns,
+        MIN(s.step_end, c.end) as end_ns
     FROM step_ranges s
     JOIN comm_ranges c
       ON c.start < s.step_end
      AND c.end > s.step_start
-    GROUP BY s.step_idx
+),
+step_comm_ordered AS (
+    SELECT
+        step_idx,
+        deviceId,
+        start_ns,
+        end_ns,
+        MAX(end_ns) OVER (
+            PARTITION BY step_idx, deviceId
+            ORDER BY start_ns, end_ns
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) as prev_max_end_ns
+    FROM step_comm_intervals
+),
+step_comm_grouped AS (
+    SELECT
+        step_idx,
+        deviceId,
+        start_ns,
+        end_ns,
+        SUM(
+            CASE
+                WHEN prev_max_end_ns IS NULL OR start_ns > prev_max_end_ns
+                THEN 1 ELSE 0
+            END
+        ) OVER (
+            PARTITION BY step_idx, deviceId
+            ORDER BY start_ns, end_ns
+        ) as grp
+    FROM step_comm_ordered
+),
+step_comm_merged AS (
+    SELECT
+        step_idx,
+        deviceId,
+        grp,
+        MIN(start_ns) as start_ns,
+        MAX(end_ns) as end_ns
+    FROM step_comm_grouped
+    GROUP BY step_idx, deviceId, grp
+),
+step_comm_per_device AS (
+    SELECT
+        step_idx,
+        deviceId,
+        SUM((end_ns - start_ns) / 1e6) as comm_ms
+    FROM step_comm_merged
+    GROUP BY step_idx, deviceId
+),
+step_comm AS (
+    SELECT
+        step_idx,
+        MAX(comm_ms) as comm_ms
+    FROM step_comm_per_device
+    GROUP BY step_idx
 ),
 step_ensure AS (
     SELECT
@@ -1390,17 +1512,71 @@ ensure_ranges AS (
     WHERE n.end IS NOT NULL
       AND n.text = 'SGL_PREFETCH_ENSURE_READY'
 ),
-step_comm AS (
+step_comm_intervals AS (
     SELECT
         s.step_idx,
-        SUM(
-            (MIN(s.step_end, c.end) - MAX(s.step_start, c.start)) / 1e6
-        ) as comm_ms
+        k.deviceId as deviceId,
+        MAX(s.step_start, k.start) as start_ns,
+        MIN(s.step_end, k.end) as end_ns
     FROM step_ranges s
-    JOIN comm_ranges c
-      ON c.start < s.step_end
-     AND c.end > s.step_start
-    GROUP BY s.step_idx
+    JOIN comm_ranges k
+      ON k.start < s.step_end
+     AND k.end > s.step_start
+),
+step_comm_ordered AS (
+    SELECT
+        step_idx,
+        deviceId,
+        start_ns,
+        end_ns,
+        MAX(end_ns) OVER (
+            PARTITION BY step_idx, deviceId
+            ORDER BY start_ns, end_ns
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) as prev_max_end_ns
+    FROM step_comm_intervals
+),
+step_comm_grouped AS (
+    SELECT
+        step_idx,
+        deviceId,
+        start_ns,
+        end_ns,
+        SUM(
+            CASE
+                WHEN prev_max_end_ns IS NULL OR start_ns > prev_max_end_ns
+                THEN 1 ELSE 0
+            END
+        ) OVER (
+            PARTITION BY step_idx, deviceId
+            ORDER BY start_ns, end_ns
+        ) as grp
+    FROM step_comm_ordered
+),
+step_comm_merged AS (
+    SELECT
+        step_idx,
+        deviceId,
+        grp,
+        MIN(start_ns) as start_ns,
+        MAX(end_ns) as end_ns
+    FROM step_comm_grouped
+    GROUP BY step_idx, deviceId, grp
+),
+step_comm_per_device AS (
+    SELECT
+        step_idx,
+        deviceId,
+        SUM((end_ns - start_ns) / 1e6) as comm_ms
+    FROM step_comm_merged
+    GROUP BY step_idx, deviceId
+),
+step_comm AS (
+    SELECT
+        step_idx,
+        MAX(comm_ms) as comm_ms
+    FROM step_comm_per_device
+    GROUP BY step_idx
 ),
 step_ensure AS (
     SELECT
