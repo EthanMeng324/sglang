@@ -925,13 +925,42 @@ prefetch_h2d AS (
 ),
 real_comm AS (
     SELECT
-        k.start,
-        k.end,
-        k.deviceId,
-        (k.end - k.start) / 1e6 as dur_ms
-    FROM kernel_base k
-    JOIN StringIds s ON k.demangledName = s.id
+        n.start,
+        n.end,
+        CAST(SUBSTR(n.text, LENGTH('SGL_REAL_COMM_USP_DEV') + 1) AS INTEGER) as deviceId,
+        (n.end - n.start) / 1e6 as dur_ms
+    FROM NVTX_EVENTS n
+    WHERE n.end IS NOT NULL
+      AND n.text GLOB 'SGL_REAL_COMM_USP_DEV*'
+      AND (
+            (SELECT COUNT(*) FROM denoise_windows) = 0
+            OR EXISTS (
+                SELECT 1 FROM denoise_windows d
+                WHERE d.start < n.end AND d.end > n.start
+            )
+      )
+    UNION ALL
+    SELECT
+        kb.start,
+        kb.end,
+        kb.deviceId,
+        (kb.end - kb.start) / 1e6 as dur_ms
+    FROM kernel_base kb
+    JOIN StringIds s ON kb.demangledName = s.id
     WHERE s.value LIKE '%nccl%'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM NVTX_EVENTS n
+          WHERE n.end IS NOT NULL
+            AND n.text GLOB 'SGL_REAL_COMM_USP_DEV*'
+            AND (
+                  (SELECT COUNT(*) FROM denoise_windows) = 0
+                  OR EXISTS (
+                      SELECT 1 FROM denoise_windows d
+                      WHERE d.start < n.end AND d.end > n.start
+                  )
+            )
+      )
 ),
 real_tagged AS (
     SELECT
@@ -1062,13 +1091,42 @@ prefetch_h2d AS (
 ),
 real_comm AS (
     SELECT
-        k.start,
-        k.end,
-        k.deviceId,
-        (k.end - k.start) / 1e6 as dur_ms
-    FROM kernel_base k
-    JOIN StringIds s ON k.demangledName = s.id
+        n.start,
+        n.end,
+        CAST(SUBSTR(n.text, LENGTH('SGL_REAL_COMM_USP_DEV') + 1) AS INTEGER) as deviceId,
+        (n.end - n.start) / 1e6 as dur_ms
+    FROM NVTX_EVENTS n
+    WHERE n.end IS NOT NULL
+      AND n.text GLOB 'SGL_REAL_COMM_USP_DEV*'
+      AND (
+            (SELECT COUNT(*) FROM denoise_windows) = 0
+            OR EXISTS (
+                SELECT 1 FROM denoise_windows d
+                WHERE d.start < n.end AND d.end > n.start
+            )
+      )
+    UNION ALL
+    SELECT
+        kb.start,
+        kb.end,
+        kb.deviceId,
+        (kb.end - kb.start) / 1e6 as dur_ms
+    FROM kernel_base kb
+    JOIN StringIds s ON kb.demangledName = s.id
     WHERE s.value LIKE '%nccl%'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM NVTX_EVENTS n
+          WHERE n.end IS NOT NULL
+            AND n.text GLOB 'SGL_REAL_COMM_USP_DEV*'
+            AND (
+                  (SELECT COUNT(*) FROM denoise_windows) = 0
+                  OR EXISTS (
+                      SELECT 1 FROM denoise_windows d
+                      WHERE d.start < n.end AND d.end > n.start
+                  )
+            )
+      )
 ),
 real_tagged AS (
     SELECT
@@ -1501,10 +1559,24 @@ kernel_base AS (
        )
 ),
 comm_ranges AS (
-    SELECT k.start, k.end
-    FROM kernel_base k
-    JOIN StringIds s ON k.demangledName = s.id
+    SELECT
+        n.start,
+        n.end,
+        CAST(SUBSTR(n.text, LENGTH('SGL_REAL_COMM_USP_DEV') + 1) AS INTEGER) as deviceId
+    FROM NVTX_EVENTS n
+    WHERE n.end IS NOT NULL
+      AND n.text GLOB 'SGL_REAL_COMM_USP_DEV*'
+    UNION ALL
+    SELECT kb.start, kb.end, kb.deviceId
+    FROM kernel_base kb
+    JOIN StringIds s ON kb.demangledName = s.id
     WHERE s.value LIKE '%nccl%'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM NVTX_EVENTS n
+          WHERE n.end IS NOT NULL
+            AND n.text GLOB 'SGL_REAL_COMM_USP_DEV*'
+      )
 ),
 ensure_ranges AS (
     SELECT n.start, n.end
@@ -1515,13 +1587,13 @@ ensure_ranges AS (
 step_comm_intervals AS (
     SELECT
         s.step_idx,
-        k.deviceId as deviceId,
-        MAX(s.step_start, k.start) as start_ns,
-        MIN(s.step_end, k.end) as end_ns
+        c.deviceId as deviceId,
+        MAX(s.step_start, c.start) as start_ns,
+        MIN(s.step_end, c.end) as end_ns
     FROM step_ranges s
-    JOIN comm_ranges k
-      ON k.start < s.step_end
-     AND k.end > s.step_start
+    JOIN comm_ranges c
+      ON c.start < s.step_end
+     AND c.end > s.step_start
 ),
 step_comm_ordered AS (
     SELECT

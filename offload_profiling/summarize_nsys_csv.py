@@ -244,7 +244,7 @@ def build_summary(analysis_dir: Path, comm_mode: str) -> str:
     if comm_mode == "mock":
         lines.append("## 2) mock D2H 与 prefetch H2D 重叠（核心目标）")
     else:
-        lines.append("## 2) NCCL 通信 与 prefetch H2D 重叠（核心目标）")
+        lines.append("## 2) 真实通信 与 prefetch H2D 重叠（核心目标）")
     lines.append("")
     lines.append("| 指标 | " + " | ".join(label for _, label in RUN_SPECS) + " |")
     lines.append("|---|" + "---:|" * len(RUN_SPECS))
@@ -257,7 +257,7 @@ def build_summary(analysis_dir: Path, comm_mode: str) -> str:
         if comm_mode == "mock"
         else "overlapped_comm_ratio_pct"
     )
-    name_label = "mock D2H" if comm_mode == "mock" else "NCCL 通信"
+    name_label = "mock D2H" if comm_mode == "mock" else "真实通信"
 
     def metric_row(metric_label: str, value_fn) -> None:
         values = [fmt_num(value_fn(run_id), 3) for run_id, _ in RUN_SPECS]
@@ -352,7 +352,7 @@ def build_summary(analysis_dir: Path, comm_mode: str) -> str:
         )
     else:
         lines.append(
-            "- 通信时长来源: `denoising_step_components_*.csv` 中的 `comm_ms`（每步先在单个 device 上对 NCCL 时间做并集，再取各 device 最大值，近似通信 critical path）。"
+            "- 通信时长来源: `denoising_step_components_*.csv` 中的 `comm_ms`（优先使用 USP 逻辑通信 NVTX 窗口；若缺失则回退到 NCCL kernels。每步先在单个 device 上做时间并集，再取各 device 最大值，近似通信 critical path）。"
         )
     lines.append(
         "- prefetch critical-path wait 来源: "
