@@ -79,6 +79,16 @@ def one_row(rows: list[dict[str, str]]) -> dict[str, str]:
     return rows[0] if rows else {}
 
 
+def load_marker_status(analysis_dir: Path) -> dict[str, dict[str, str]]:
+    rows = load_csv(analysis_dir / "marker_status.csv")
+    out: dict[str, dict[str, str]] = {}
+    for row in rows:
+        run = row.get("run")
+        if run:
+            out[run] = row
+    return out
+
+
 def first_existing_row(analysis_dir: Path, names: list[str]) -> dict[str, str]:
     for name in names:
         row = one_row(load_csv(analysis_dir / name))
@@ -189,6 +199,7 @@ def avg(values: list[float]) -> float | None:
 
 
 def build_summary(analysis_dir: Path, comm_mode: str) -> str:
+    marker_status = load_marker_status(analysis_dir)
     run_data: dict[str, dict[str, Any]] = {}
     all_steps: set[int] = set()
     for run_id, label in RUN_SPECS:
@@ -215,6 +226,7 @@ def build_summary(analysis_dir: Path, comm_mode: str) -> str:
 
         run_data[run_id] = {
             "label": label,
+            "marker_status": marker_status.get(run_id, {}),
             "overlap_rows": overlap_rows,
             "overlap_ratio": overlap_ratio,
             "totals": totals,
@@ -258,6 +270,21 @@ def build_summary(analysis_dir: Path, comm_mode: str) -> str:
         else "overlapped_comm_ratio_pct"
     )
     name_label = "mock D2H" if comm_mode == "mock" else "真实通信"
+
+    if comm_mode == "real":
+        lines.append(
+            "| 真实通信来源 | "
+            + " | ".join(
+                (
+                    "USP 逻辑通信 NVTX"
+                    if to_float(run_data[run_id]["marker_status"].get("real_comm_nvtx_ranges"))
+                    not in (None, 0.0)
+                    else "NCCL kernel fallback"
+                )
+                for run_id, _ in RUN_SPECS
+            )
+            + " |"
+        )
 
     def metric_row(metric_label: str, value_fn) -> None:
         values = [fmt_num(value_fn(run_id), 3) for run_id, _ in RUN_SPECS]

@@ -117,6 +117,11 @@ LIMIT 1;
         "SELECT COUNT(*) FROM NVTX_EVENTS WHERE text='SGL_MOCK_COMM_PCIE' AND end IS NOT NULL",
         default=0,
     )
+    real_comm_nvtx_ranges = fetch_scalar(
+        conn,
+        "SELECT COUNT(*) FROM NVTX_EVENTS WHERE text GLOB 'SGL_REAL_COMM_USP_DEV*' AND end IS NOT NULL",
+        default=0,
+    )
     conn.close()
 
     if row is None:
@@ -126,6 +131,7 @@ LIMIT 1;
             "denoise_windows": denoise_windows,
             "prefetch_ranges": prefetch_ranges,
             "mock_nvtx_ranges": mock_nvtx_ranges,
+            "real_comm_nvtx_ranges": real_comm_nvtx_ranges,
         }
     return {
         "bytes": int(row[0]),
@@ -133,6 +139,7 @@ LIMIT 1;
         "denoise_windows": denoise_windows,
         "prefetch_ranges": prefetch_ranges,
         "mock_nvtx_ranges": mock_nvtx_ranges,
+        "real_comm_nvtx_ranges": real_comm_nvtx_ranges,
     }
 
 
@@ -1978,6 +1985,7 @@ def main():
                 "denoise_windows",
                 "prefetch_nvtx_ranges",
                 "mock_nvtx_ranges",
+                "real_comm_nvtx_ranges",
                 "detected_mock_d2h_bytes",
                 "detected_mock_d2h_count",
                 "nccl_kernels",
@@ -1991,6 +1999,7 @@ def main():
                     db_info[db]["denoise_windows"],
                     db_info[db]["prefetch_ranges"],
                     db_info[db]["mock_nvtx_ranges"],
+                    db_info[db]["real_comm_nvtx_ranges"],
                     db_info[db]["bytes"] if db_info[db]["bytes"] is not None else "",
                     db_info[db]["count"],
                     db_info[db]["nccl_kernels"],
