@@ -3,8 +3,9 @@ import re
 import threading
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from itertools import chain
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, Iterable, List, Sequence, Set, Tuple
 
 import torch
 
@@ -34,6 +35,25 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_str(name: str, default: str = "") -> str:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    return v
+
+
+def _parse_phase_name_csv(raw: str | None) -> Set[str]:
+    if raw is None:
+        return set()
+    return {item.strip() for item in raw.split(",") if item.strip()}
+
+
+@dataclass(frozen=True)
+class PhaseSpec:
+    name: str
+    prefixes: Tuple[str, ...]
+
+
 class LayerwiseOffloadManager:
     """Simplified chunk-wise, comm-aware layerwise offload manager.
 
@@ -56,6 +76,8 @@ class LayerwiseOffloadManager:
         comm_aware: bool = False,
         comm_patch_torch_distributed: bool = False,
         prefetch_chunk_size_mb: int = 32,
+        phase_specs: Sequence[PhaseSpec] | None = None,
+        resident_phase_names: Set[str] | None = None,
         submodule_granularity: bool = True,
     ) -> None:
         self.model = model
@@ -67,6 +89,20 @@ class LayerwiseOffloadManager:
         self.comm_patch_torch_distributed = comm_patch_torch_distributed
         self.prefetch_chunk_size_bytes = max(1, prefetch_chunk_size_mb) * 1024 * 1024
         self.submodule_granularity = submodule_granularity
+        self.phase_specs: Tuple[PhaseSpec, ...] = tuple(
+            phase_specs or (PhaseSpec(name="layer", prefixes=("",)),)
+        )
+        self.phase_name_to_idx = {
+            spec.name: phase_idx for phase_idx, spec in enumerate(self.phase_specs)
+        }
+        self.resident_phase_names = {
+            name
+            for name in (resident_phase_names or set())
+            if name in self.phase_name_to_idx
+        }
+        self._resident_phase_ids = {
+            self.phase_name_to_idx[name] for name in self.resident_phase_names
+        }
         self.enabled = bool(enabled and torch.cuda.is_available())
 
         self.comm_tracker: CommunicationActivityTracker | None = None
@@ -80,24 +116,33 @@ class LayerwiseOffloadManager:
         self._layer_name_re = re.compile(
             rf"(^|\.){re.escape(layers_attr_str)}\.(\d+)(\.|$)"
         )
+        self._unmatched_phase_suffixes: Set[str] = set()
 
-        # layer_idx -> {dtype: consolidated pinned CPU buffer}
-        self._consolidated_cpu_weights: Dict[int, Dict[torch.dtype, torch.Tensor]] = {}
+        # layer_idx -> {phase_idx: {dtype: consolidated pinned CPU buffer}}
+        self._consolidated_cpu_weights: Dict[
+            int, Dict[int, Dict[torch.dtype, torch.Tensor]]
+        ] = {}
         # layer_idx -> total bytes for profiling
         self._layer_total_bytes: Dict[int, int] = {}
-        # layer_idx -> {name: {dtype, offset, numel, shape}}
+        # layer_idx -> {phase_idx: phase_prefetch_bytes}
+        self._phase_total_bytes: Dict[int, Dict[int, int]] = {}
+        # layer_idx -> {name: {dtype, phase_id, offset, numel, shape, resident}}
         self._weight_metadata: Dict[int, Dict[str, Dict[str, Any]]] = {}
 
-        # layer_idx -> {dtype: layer-sized GPU buffer}
-        self._prefetch_gpu_buffers: Dict[int, Dict[torch.dtype, torch.Tensor]] = {}
-        # layer_idx -> {dtype: copied_numel}
-        self._prefetch_offsets: Dict[int, Dict[torch.dtype, int]] = {}
+        # layer_idx -> {phase_idx: {dtype: phase-sized GPU buffer}}
+        self._prefetch_gpu_buffers: Dict[
+            int, Dict[int, Dict[torch.dtype, torch.Tensor]]
+        ] = {}
+        # layer_idx -> {phase_idx: {dtype: copied_numel}}
+        self._prefetch_offsets: Dict[int, Dict[int, Dict[torch.dtype, int]]] = {}
 
         # layer_idx -> event recorded on copy stream when prefetch completes
         self._prefetch_events: Dict[int, torch.cuda.Event] = {}
-        # layer_idx -> [(chunk_done_event, chunk_nbytes)]
+        # layer_idx -> {phase_idx: event recorded on copy stream when phase completes}
+        self._phase_events: Dict[int, Dict[int, torch.cuda.Event]] = {}
+        # layer_idx -> {phase_idx: [(chunk_done_event, chunk_nbytes)]}
         self._prefetch_chunk_events: Dict[
-            int, List[Tuple[torch.cuda.Event, int]]
+            int, Dict[int, List[Tuple[torch.cuda.Event, int]]]
         ] = {}
         # GPU resident layers
         self._gpu_layers: Set[int] = set()
@@ -148,6 +193,78 @@ class LayerwiseOffloadManager:
             return int(m.group(2))
         except Exception:
             return None
+
+    def _relative_name_after_layer(self, name: str) -> str | None:
+        m = self._layer_name_re.search(name)
+        if not m:
+            return None
+        return name[m.end() :]
+
+    def _match_phase_idx(self, name: str) -> int:
+        relative_name = self._relative_name_after_layer(name) or ""
+        for phase_idx, spec in enumerate(self.phase_specs):
+            for prefix in spec.prefixes:
+                if not prefix:
+                    return phase_idx
+                if relative_name == prefix or relative_name.startswith(prefix + "."):
+                    return phase_idx
+
+        fallback_idx = len(self.phase_specs) - 1
+        if relative_name not in self._unmatched_phase_suffixes:
+            self._unmatched_phase_suffixes.add(relative_name)
+            logger.warning(
+                "Offload phase matcher for %s fell back to phase %s on tensor %s.",
+                self.layers_attr_str,
+                self.phase_specs[fallback_idx].name,
+                relative_name,
+            )
+        return fallback_idx
+
+    def _phase_prefetch_bytes(self, layer_idx: int, phase_idx: int) -> int:
+        return int(self._phase_total_bytes.get(layer_idx, {}).get(phase_idx, 0))
+
+    def _phase_is_resident(self, phase_idx: int) -> bool:
+        return phase_idx in self._resident_phase_ids
+
+    def _phase_ready_locked(self, layer_idx: int, phase_idx: int) -> bool:
+        if self._phase_is_resident(phase_idx):
+            return True
+        if self._phase_prefetch_bytes(layer_idx, phase_idx) <= 0:
+            return True
+        return phase_idx in self._phase_events.get(layer_idx, {})
+
+    def _layer_complete_locked(self, layer_idx: int) -> bool:
+        for phase_idx in range(len(self.phase_specs)):
+            if not self._phase_ready_locked(layer_idx, phase_idx):
+                return False
+        return True
+
+    def _first_incomplete_phase_locked(self, layer_idx: int) -> int | None:
+        for phase_idx in range(len(self.phase_specs)):
+            if not self._phase_ready_locked(layer_idx, phase_idx):
+                return phase_idx
+        return None
+
+    def _target_phase_event_locked(
+        self, layer_idx: int, phase_idx: int
+    ) -> torch.cuda.Event | None:
+        if self._phase_is_resident(phase_idx):
+            return None
+        if self._phase_prefetch_bytes(layer_idx, phase_idx) <= 0:
+            return None
+        return self._phase_events.get(layer_idx, {}).get(phase_idx)
+
+    def _mark_layer_complete_locked(self, layer_idx: int) -> None:
+        if layer_idx in self._prefetch_events:
+            return
+        event = torch.cuda.Event()
+        event.record(self.copy_stream)
+        self._prefetch_events[layer_idx] = event
+        self._gpu_layers.add(layer_idx)
+        self._scheduled_layers.discard(layer_idx)
+        if self._urgent_layer == layer_idx:
+            self._urgent_layer = None
+        self._record_unique_layer_loaded(layer_idx)
 
     def _begin_step_stats(self) -> None:
         with self._state_lock:
@@ -236,31 +353,62 @@ class LayerwiseOffloadManager:
         )
 
     @torch.compiler.disable
-    def _estimate_waited_prefetch_bytes(self, layer_idx: int) -> Tuple[int, int]:
-        total_bytes = int(self._layer_total_bytes.get(layer_idx, 0))
+    def _estimate_waited_prefetch_bytes(
+        self, layer_idx: int, phase_idx: int | None = None
+    ) -> Tuple[int, int]:
+        total_bytes = (
+            self._phase_prefetch_bytes(layer_idx, phase_idx)
+            if phase_idx is not None
+            else int(self._layer_total_bytes.get(layer_idx, 0))
+        )
         if total_bytes <= 0:
             return 0, 0
 
         with self._state_lock:
-            if layer_idx in self._gpu_layers:
-                ready_event = self._prefetch_events.get(layer_idx)
-                if ready_event is None or ready_event.query():
-                    return 0, total_bytes
-            chunk_events = list(self._prefetch_chunk_events.get(layer_idx, []))
             layer_known = layer_idx in self._consolidated_cpu_weights
+            if phase_idx is None:
+                if layer_idx in self._gpu_layers:
+                    ready_event = self._prefetch_events.get(layer_idx)
+                    if ready_event is None or ready_event.query():
+                        return 0, total_bytes
+                phase_event_dict = self._phase_events.get(layer_idx, {})
+                chunk_events_by_phase = dict(
+                    self._prefetch_chunk_events.get(layer_idx, {})
+                )
+            else:
+                if self._phase_is_resident(phase_idx):
+                    return 0, total_bytes
+                phase_event = self._phase_events.get(layer_idx, {}).get(phase_idx)
+                if phase_event is not None and phase_event.query():
+                    return 0, total_bytes
+                chunk_events_by_phase = {
+                    phase_idx: list(
+                        self._prefetch_chunk_events.get(layer_idx, {}).get(
+                            phase_idx, []
+                        )
+                    )
+                }
 
         if not layer_known:
             return 0, 0
-        if not chunk_events:
+        if not chunk_events_by_phase:
             return total_bytes, total_bytes
 
         completed_bytes = 0
-        for event, nbytes in chunk_events:
-            try:
-                if event.query():
-                    completed_bytes += int(nbytes)
-            except Exception:
-                continue
+        for current_phase_idx, chunk_events in chunk_events_by_phase.items():
+            if phase_idx is None:
+                phase_event = phase_event_dict.get(current_phase_idx)
+                if phase_event is not None and phase_event.query():
+                    completed_bytes += self._phase_prefetch_bytes(
+                        layer_idx, current_phase_idx
+                    )
+                    continue
+            for event, nbytes in chunk_events:
+                try:
+                    if event.query():
+                        completed_bytes += int(nbytes)
+                except Exception:
+                    continue
 
         waited_bytes = max(0, total_bytes - completed_bytes)
         return waited_bytes, total_bytes
@@ -384,37 +532,43 @@ class LayerwiseOffloadManager:
             return False
         if layer_idx not in self._consolidated_cpu_weights:
             return False
-        if layer_idx in self._gpu_layers or layer_idx in self._prefetch_events:
+        if self._layer_complete_locked(layer_idx):
             return False
         if layer_idx in self._scheduled_layers:
             return False
         self._scheduled_layers.add(layer_idx)
         return True
 
-    def _pick_next_layer_locked(self) -> int | None:
+    def _pick_next_phase_locked(self) -> Tuple[int, int] | None:
         stale = [
             layer_idx
             for layer_idx in self._scheduled_layers
             if (
                 layer_idx not in self._consolidated_cpu_weights
-                or layer_idx in self._gpu_layers
-                or layer_idx in self._prefetch_events
+                or self._layer_complete_locked(layer_idx)
             )
         ]
         for layer_idx in stale:
             self._scheduled_layers.discard(layer_idx)
 
         if self._urgent_layer is not None and self._urgent_layer in self._scheduled_layers:
-            return self._urgent_layer
+            phase_idx = self._first_incomplete_phase_locked(self._urgent_layer)
+            if phase_idx is not None:
+                return self._urgent_layer, phase_idx
 
         if not self._scheduled_layers:
             return None
 
         anchor = self._anchor_layer
-        return min(
+        layer_idx = min(
             self._scheduled_layers,
             key=lambda layer_idx: (layer_idx - anchor) % self.num_layers,
         )
+        phase_idx = self._first_incomplete_phase_locked(layer_idx)
+        if phase_idx is None:
+            self._scheduled_layers.discard(layer_idx)
+            return None
+        return layer_idx, phase_idx
 
     def _schedule_prefetch_window(self, anchor: int) -> None:
         queued = False
@@ -484,12 +638,13 @@ class LayerwiseOffloadManager:
 
         while not self._worker_stop_event.is_set():
             with self._state_lock:
-                layer_idx = self._pick_next_layer_locked()
+                next_phase = self._pick_next_phase_locked()
 
-            if layer_idx is None:
+            if next_phase is None:
                 self._worker_wakeup_event.wait(timeout=0.01)
                 self._worker_wakeup_event.clear()
                 continue
+            layer_idx, phase_idx = next_phase
 
             if not self._wait_for_comm_inactive(
                 background=True,
@@ -498,13 +653,15 @@ class LayerwiseOffloadManager:
             ):
                 continue
 
-            copied = self._copy_one_chunk(layer_idx, background=True)
+            copied = self._copy_one_chunk(layer_idx, phase_idx, background=True)
             if not copied:
                 time.sleep(0.0005)
 
-    def _bind_layer_weights_locked(self, layer_idx: int) -> None:
-        gpu_buffers = self._prefetch_gpu_buffers[layer_idx]
+    def _bind_phase_weights_locked(self, layer_idx: int, phase_idx: int) -> None:
+        gpu_buffers = self._prefetch_gpu_buffers[layer_idx][phase_idx]
         for name, meta in self._weight_metadata[layer_idx].items():
+            if meta["phase_id"] != phase_idx or meta["resident"]:
+                continue
             dtype = meta["dtype"]
             gpu_buffer = gpu_buffers[dtype]
             target = self.get_target_with_name(name)
@@ -521,16 +678,19 @@ class LayerwiseOffloadManager:
             torch.cuda.current_stream().wait_stream(self.copy_stream)
 
     @torch.compiler.disable
-    def _copy_one_chunk(self, layer_idx: int, *, background: bool) -> bool:
+    def _copy_one_chunk(
+        self, layer_idx: int, phase_idx: int, *, background: bool
+    ) -> bool:
         if not self.enabled or self.device is None or self.copy_stream is None:
             return False
 
         with self._copy_lock:
             with self._state_lock:
-                if layer_idx in self._gpu_layers or layer_idx in self._prefetch_events:
-                    self._scheduled_layers.discard(layer_idx)
-                    if self._urgent_layer == layer_idx:
-                        self._urgent_layer = None
+                if self._phase_ready_locked(layer_idx, phase_idx):
+                    if self._layer_complete_locked(layer_idx):
+                        self._scheduled_layers.discard(layer_idx)
+                        if self._urgent_layer == layer_idx:
+                            self._urgent_layer = None
                     return False
 
                 if layer_idx not in self._consolidated_cpu_weights:
@@ -539,24 +699,44 @@ class LayerwiseOffloadManager:
                         self._urgent_layer = None
                     return False
 
-                if layer_idx not in self._prefetch_gpu_buffers:
-                    self._prefetch_gpu_buffers[layer_idx] = {
+                if self._phase_prefetch_bytes(layer_idx, phase_idx) <= 0:
+                    if layer_idx not in self._phase_events:
+                        self._phase_events[layer_idx] = {}
+                    if phase_idx not in self._phase_events[layer_idx]:
+                        event = torch.cuda.Event()
+                        event.record(self.copy_stream)
+                        self._phase_events[layer_idx][phase_idx] = event
+                    if self._layer_complete_locked(layer_idx):
+                        self._mark_layer_complete_locked(layer_idx)
+                    return False
+
+                self._prefetch_gpu_buffers.setdefault(layer_idx, {})
+                self._prefetch_offsets.setdefault(layer_idx, {})
+                self._phase_events.setdefault(layer_idx, {})
+                self._prefetch_chunk_events.setdefault(layer_idx, {})
+
+                if phase_idx not in self._prefetch_gpu_buffers[layer_idx]:
+                    cpu_phase_buffers = self._consolidated_cpu_weights[layer_idx].get(
+                        phase_idx, {}
+                    )
+                    self._prefetch_gpu_buffers[layer_idx][phase_idx] = {
                         dtype: torch.empty(
                             cpu_buffer.shape,
                             dtype=dtype,
                             device=self.device,
                         )
-                        for dtype, cpu_buffer in self._consolidated_cpu_weights[
-                            layer_idx
-                        ].items()
+                        for dtype, cpu_buffer in cpu_phase_buffers.items()
                     }
-                    self._prefetch_offsets[layer_idx] = {
-                        dtype: 0 for dtype in self._consolidated_cpu_weights[layer_idx]
+                    self._prefetch_offsets[layer_idx][phase_idx] = {
+                        dtype: 0 for dtype in cpu_phase_buffers
                     }
+                    self._bind_phase_weights_locked(layer_idx, phase_idx)
 
-                offsets = self._prefetch_offsets[layer_idx]
-                cpu_by_dtype = self._consolidated_cpu_weights[layer_idx]
-                gpu_by_dtype = self._prefetch_gpu_buffers[layer_idx]
+                offsets = self._prefetch_offsets[layer_idx][phase_idx]
+                cpu_by_dtype = self._consolidated_cpu_weights[layer_idx].get(
+                    phase_idx, {}
+                )
+                gpu_by_dtype = self._prefetch_gpu_buffers[layer_idx][phase_idx]
 
                 chosen_dtype = None
                 chosen_start = 0
@@ -576,16 +756,12 @@ class LayerwiseOffloadManager:
                     break
 
                 if chosen_dtype is None:
-                    if layer_idx not in self._prefetch_events:
+                    if phase_idx not in self._phase_events[layer_idx]:
                         event = torch.cuda.Event()
                         event.record(self.copy_stream)
-                        self._prefetch_events[layer_idx] = event
-                        self._bind_layer_weights_locked(layer_idx)
-                        self._gpu_layers.add(layer_idx)
-                        self._scheduled_layers.discard(layer_idx)
-                        if self._urgent_layer == layer_idx:
-                            self._urgent_layer = None
-                        self._record_unique_layer_loaded(layer_idx)
+                        self._phase_events[layer_idx][phase_idx] = event
+                    if self._layer_complete_locked(layer_idx):
+                        self._mark_layer_complete_locked(layer_idx)
                     return False
 
                 src = cpu_by_dtype[chosen_dtype][chosen_start:chosen_end]
@@ -614,34 +790,41 @@ class LayerwiseOffloadManager:
             self._record_copy_stats(background=background, nbytes=nbytes, dur_s=copy_dur_s)
 
             with self._state_lock:
-                self._prefetch_chunk_events.setdefault(layer_idx, []).append(
+                self._prefetch_chunk_events.setdefault(layer_idx, {}).setdefault(
+                    phase_idx, []
+                ).append(
                     (chunk_done_event, int(nbytes))
                 )
-                if layer_idx not in self._prefetch_offsets:
+                if (
+                    layer_idx not in self._prefetch_offsets
+                    or phase_idx not in self._prefetch_offsets[layer_idx]
+                ):
                     return True
 
-                self._prefetch_offsets[layer_idx][chosen_dtype] = chosen_end
+                self._prefetch_offsets[layer_idx][phase_idx][chosen_dtype] = chosen_end
 
                 complete = all(
-                    self._prefetch_offsets[layer_idx][dtype]
-                    >= self._consolidated_cpu_weights[layer_idx][dtype].numel()
-                    for dtype in self._consolidated_cpu_weights[layer_idx]
+                    self._prefetch_offsets[layer_idx][phase_idx][dtype]
+                    >= self._consolidated_cpu_weights[layer_idx][phase_idx][
+                        dtype
+                    ].numel()
+                    for dtype in self._consolidated_cpu_weights[layer_idx].get(
+                        phase_idx, {}
+                    )
                 )
-                if complete and layer_idx not in self._prefetch_events:
+                if complete and phase_idx not in self._phase_events[layer_idx]:
                     event = torch.cuda.Event()
                     event.record(self.copy_stream)
-                    self._prefetch_events[layer_idx] = event
-                    self._bind_layer_weights_locked(layer_idx)
-                    self._gpu_layers.add(layer_idx)
-                    self._scheduled_layers.discard(layer_idx)
-                    if self._urgent_layer == layer_idx:
-                        self._urgent_layer = None
-                    self._record_unique_layer_loaded(layer_idx)
+                    self._phase_events[layer_idx][phase_idx] = event
+                if self._layer_complete_locked(layer_idx):
+                    self._mark_layer_complete_locked(layer_idx)
 
             return True
 
     @torch.compiler.disable
-    def _prefetch_layer_blocking(self, layer_idx: int) -> None:
+    def _prefetch_layer_blocking(
+        self, layer_idx: int, target_phase_idx: int | None = None
+    ) -> None:
         if not self.enabled or self.device is None:
             return
 
@@ -652,10 +835,16 @@ class LayerwiseOffloadManager:
 
         while True:
             with self._state_lock:
-                event = self._prefetch_events.get(layer_idx)
                 has_data = layer_idx in self._consolidated_cpu_weights
-            if event is not None:
-                torch.cuda.current_stream().wait_event(event)
+                if target_phase_idx is None:
+                    done = self._layer_complete_locked(layer_idx)
+                    event = self._prefetch_events.get(layer_idx)
+                else:
+                    done = self._phase_ready_locked(layer_idx, target_phase_idx)
+                    event = self._target_phase_event_locked(layer_idx, target_phase_idx)
+            if done:
+                if event is not None:
+                    torch.cuda.current_stream().wait_event(event)
                 return
             if not has_data:
                 return
@@ -663,21 +852,35 @@ class LayerwiseOffloadManager:
             if not self._wait_for_comm_inactive(background=False, timeout=None):
                 continue
 
-            copied = self._copy_one_chunk(layer_idx, background=False)
+            with self._state_lock:
+                frontier_phase_idx = self._first_incomplete_phase_locked(layer_idx)
+            if frontier_phase_idx is None:
+                time.sleep(0.0005)
+                continue
+
+            copied = self._copy_one_chunk(
+                layer_idx, frontier_phase_idx, background=False
+            )
             if copied:
                 continue
 
             time.sleep(0.0005)
 
     @torch.compiler.disable
-    def _ensure_layer_ready(self, layer_idx: int) -> None:
+    def _ensure_phase_ready(
+        self, layer_idx: int, target_phase_idx: int | None = None
+    ) -> None:
         if not self.enabled or self.device is None:
             return
 
         ensure_t0 = time.perf_counter()
         push_nvtx = bool(torch.cuda.is_available() and hasattr(torch.cuda, "nvtx"))
         if push_nvtx:
-            torch.cuda.nvtx.range_push("SGL_PREFETCH_ENSURE_READY")
+            torch.cuda.nvtx.range_push(
+                "SGL_PREFETCH_ENSURE_PHASE_READY"
+                if target_phase_idx is not None
+                else "SGL_PREFETCH_ENSURE_READY"
+            )
         try:
             with self._state_lock:
                 self._schedule_layer_locked(layer_idx)
@@ -686,18 +889,36 @@ class LayerwiseOffloadManager:
 
             while True:
                 with self._state_lock:
-                    event = self._prefetch_events.get(layer_idx)
-                if event is not None:
+                    if target_phase_idx is None:
+                        ready = self._layer_complete_locked(layer_idx)
+                        event = self._prefetch_events.get(layer_idx)
+                    else:
+                        ready = self._phase_ready_locked(layer_idx, target_phase_idx)
+                        event = self._target_phase_event_locked(
+                            layer_idx, target_phase_idx
+                        )
+                if ready:
                     break
 
                 worker_alive = (
                     self._worker_thread is not None and self._worker_thread.is_alive()
                 )
                 if not worker_alive:
-                    self._prefetch_layer_blocking(layer_idx)
+                    self._prefetch_layer_blocking(
+                        layer_idx, target_phase_idx=target_phase_idx
+                    )
                     with self._state_lock:
-                        event = self._prefetch_events.get(layer_idx)
-                    if event is not None:
+                        if target_phase_idx is None:
+                            ready = self._layer_complete_locked(layer_idx)
+                            event = self._prefetch_events.get(layer_idx)
+                        else:
+                            ready = self._phase_ready_locked(
+                                layer_idx, target_phase_idx
+                            )
+                            event = self._target_phase_event_locked(
+                                layer_idx, target_phase_idx
+                            )
+                    if ready:
                         break
 
                 self._worker_wakeup_event.set()
@@ -705,10 +926,14 @@ class LayerwiseOffloadManager:
 
             if event is not None:
                 torch.cuda.current_stream().wait_event(event)
-                with self._state_lock:
+            with self._state_lock:
+                if target_phase_idx is None and self._layer_complete_locked(layer_idx):
                     self._gpu_layers.add(layer_idx)
-                    if self._urgent_layer == layer_idx:
-                        self._urgent_layer = None
+                if self._urgent_layer == layer_idx and (
+                    target_phase_idx is None
+                    or self._phase_ready_locked(layer_idx, target_phase_idx)
+                ):
+                    self._urgent_layer = None
         finally:
             if push_nvtx:
                 torch.cuda.nvtx.range_pop()
@@ -722,52 +947,74 @@ class LayerwiseOffloadManager:
         self._named_parameters = dict(self.model.named_parameters())
         self._named_buffers = dict(self.model.named_buffers())
 
-        # 1. collect and group tensors by layer and dtype
-        layer_groups: Dict[int, Dict[torch.dtype, List[Tuple[str, torch.Tensor]]]] = {}
+        # 1. collect and group tensors by layer / phase / dtype
+        layer_groups: Dict[
+            int, Dict[int, Dict[torch.dtype, List[Tuple[str, torch.Tensor]]]]
+        ] = {}
         all_tensors = chain(self._named_parameters.items(), self._named_buffers.items())
         for name, tensor in all_tensors:
             layer_idx = self._match_layer_idx(name)
             if layer_idx is None or layer_idx >= self.num_layers:
                 continue
-            layer_groups.setdefault(layer_idx, {}).setdefault(tensor.dtype, []).append(
-                (name, tensor)
-            )
+            phase_idx = self._match_phase_idx(name)
+            layer_groups.setdefault(layer_idx, {}).setdefault(phase_idx, {}).setdefault(
+                tensor.dtype, []
+            ).append((name, tensor))
 
         # 2. concat and offload (in pinned memory)
-        for layer_idx, dtype_to_params in layer_groups.items():
+        for layer_idx, phase_to_dtype_params in layer_groups.items():
             self._consolidated_cpu_weights[layer_idx] = {}
             self._weight_metadata[layer_idx] = {}
             self._layer_total_bytes[layer_idx] = 0
+            self._phase_total_bytes[layer_idx] = {
+                phase_idx: 0 for phase_idx in range(len(self.phase_specs))
+            }
 
-            for dtype, weights in dtype_to_params.items():
-                total_numel = sum(t.numel() for _, t in weights)
-                self._layer_total_bytes[layer_idx] += int(
-                    total_numel * weights[0][1].element_size()
-                )
+            for phase_idx, dtype_to_params in phase_to_dtype_params.items():
+                self._consolidated_cpu_weights[layer_idx][phase_idx] = {}
+                resident_phase = self._phase_is_resident(phase_idx)
 
-                cpu_buffer = torch.empty(
-                    total_numel,
-                    dtype=dtype,
-                    pin_memory=self.pin_cpu_memory,
-                )
+                for dtype, weights in dtype_to_params.items():
+                    total_numel = sum(t.numel() for _, t in weights)
+                    phase_bytes = int(total_numel * weights[0][1].element_size())
+                    if not resident_phase:
+                        self._layer_total_bytes[layer_idx] += phase_bytes
+                        self._phase_total_bytes[layer_idx][phase_idx] += phase_bytes
 
-                current_offset = 0
-                for name, weight in weights:
-                    numel = weight.numel()
-                    cpu_buffer[current_offset : current_offset + numel].copy_(
-                        weight.flatten()
+                    cpu_buffer = torch.empty(
+                        total_numel,
+                        dtype=dtype,
+                        pin_memory=self.pin_cpu_memory,
                     )
-                    self._weight_metadata[layer_idx][name] = {
-                        "dtype": dtype,
-                        "offset": current_offset,
-                        "numel": numel,
-                        "shape": weight.shape,
-                    }
 
-                    weight.data = torch.empty((1,), device=self.device, dtype=dtype)
-                    current_offset += numel
+                    current_offset = 0
+                    for name, weight in weights:
+                        numel = weight.numel()
+                        cpu_buffer[current_offset : current_offset + numel].copy_(
+                            weight.flatten()
+                        )
+                        self._weight_metadata[layer_idx][name] = {
+                            "dtype": dtype,
+                            "phase_id": phase_idx,
+                            "resident": resident_phase,
+                            "offset": current_offset,
+                            "numel": numel,
+                            "shape": weight.shape,
+                        }
 
-                self._consolidated_cpu_weights[layer_idx][dtype] = cpu_buffer
+                        if not resident_phase:
+                            weight.data = torch.empty(
+                                (1,), device=self.device, dtype=dtype
+                            )
+                        current_offset += numel
+
+                    self._consolidated_cpu_weights[layer_idx][phase_idx][
+                        dtype
+                    ] = cpu_buffer
+
+            with self._state_lock:
+                if self._layer_complete_locked(layer_idx):
+                    self._gpu_layers.add(layer_idx)
 
         # Warm up initial prefetch window synchronously for first step.
         self.prepare_for_next_req(non_blocking=False)
@@ -818,10 +1065,11 @@ class LayerwiseOffloadManager:
             return 0
         if layer_idx < 0 or layer_idx >= self.num_layers:
             return 0
-        if layer_idx in self._gpu_layers or layer_idx in self._prefetch_events:
-            return 0
         if layer_idx not in self._consolidated_cpu_weights:
             return 0
+        with self._state_lock:
+            if self._layer_complete_locked(layer_idx):
+                return 0
 
         if not non_blocking:
             self._prefetch_layer_blocking(layer_idx)
@@ -848,17 +1096,24 @@ class LayerwiseOffloadManager:
 
         with self._state_lock:
             for name, meta in self._weight_metadata.get(layer_idx, {}).items():
+                if meta.get("resident", False):
+                    continue
                 target = self.get_target_with_name(name)
                 target.data = torch.empty((1,), device=self.device, dtype=meta["dtype"])
 
             self._prefetch_events.pop(layer_idx, None)
+            self._phase_events.pop(layer_idx, None)
             self._prefetch_chunk_events.pop(layer_idx, None)
             self._prefetch_gpu_buffers.pop(layer_idx, None)
             self._prefetch_offsets.pop(layer_idx, None)
             self._scheduled_layers.discard(layer_idx)
             if self._urgent_layer == layer_idx:
                 self._urgent_layer = None
-            self._gpu_layers.discard(layer_idx)
+            if not all(
+                self._phase_is_resident(phase_idx)
+                for phase_idx in range(len(self.phase_specs))
+            ):
+                self._gpu_layers.discard(layer_idx)
 
     @torch.compiler.disable
     def release_all(self) -> None:
@@ -898,7 +1153,8 @@ class LayerwiseOffloadManager:
             gpu_weight = target.data.flatten().cpu()
 
             dtype = meta["dtype"]
-            cpu_buffer = self._consolidated_cpu_weights[layer_idx][dtype]
+            phase_idx = int(meta["phase_id"])
+            cpu_buffer = self._consolidated_cpu_weights[layer_idx][phase_idx][dtype]
             offset = meta["offset"]
             numel = meta["numel"]
             cpu_buffer[offset : offset + numel].copy_(gpu_weight)
@@ -940,14 +1196,17 @@ class LayerwiseOffloadManager:
                 )
 
             dtype = meta["dtype"]
+            phase_idx = int(meta["phase_id"])
             offset = meta["offset"]
             numel = meta["numel"]
-            cpu_buffer = self._consolidated_cpu_weights[layer_idx][dtype]
+            cpu_buffer = self._consolidated_cpu_weights[layer_idx][phase_idx][dtype]
             cpu_buffer[offset : offset + numel].copy_(
                 loaded_weight.to(dtype=dtype).flatten()
             )
 
-            if layer_idx in self._gpu_layers:
+            with self._state_lock:
+                phase_materialized = self._phase_ready_locked(layer_idx, phase_idx)
+            if phase_materialized:
                 target = self.get_target_with_name(name)
                 target.data.copy_(loaded_weight.to(dtype=target.dtype))
 
@@ -960,11 +1219,32 @@ class LayerwiseOffloadManager:
         for layer_idx in sorted(self._weight_metadata):
             for name, meta in self._weight_metadata[layer_idx].items():
                 dtype = meta["dtype"]
+                phase_idx = int(meta["phase_id"])
                 offset = meta["offset"]
                 numel = meta["numel"]
                 shape = meta["shape"]
-                cpu_buffer = self._consolidated_cpu_weights[layer_idx][dtype]
+                cpu_buffer = self._consolidated_cpu_weights[layer_idx][phase_idx][
+                    dtype
+                ]
                 yield name, cpu_buffer[offset : offset + numel].reshape(shape)
+
+    def supports_phase_name(self, phase_name: str) -> bool:
+        return phase_name in self.phase_name_to_idx
+
+    @torch.compiler.disable
+    def ensure_named_phase_ready(self, layer_idx: int, phase_name: str) -> None:
+        phase_idx = self.phase_name_to_idx.get(phase_name)
+        if phase_idx is None:
+            return
+
+        step_idx = self._current_profile_step_idx()
+        waited_bytes, total_bytes = self._estimate_waited_prefetch_bytes(
+            layer_idx, phase_idx
+        )
+        self._record_waited_prefetch_bytes(step_idx, waited_bytes, total_bytes)
+        wait_start = self._record_prefetch_cp_wait_start()
+        self._ensure_phase_ready(layer_idx, target_phase_idx=phase_idx)
+        self._record_prefetch_cp_wait_end(step_idx, layer_idx, wait_start)
 
     def register_forward_hooks(self) -> None:
         if not self.enabled:
@@ -989,7 +1269,9 @@ class LayerwiseOffloadManager:
                     self.prepare_for_next_req(non_blocking=True)
 
                 step_idx = self._current_profile_step_idx()
-                waited_bytes, total_bytes = self._estimate_waited_prefetch_bytes(i)
+                waited_bytes, total_bytes = self._estimate_waited_prefetch_bytes(
+                    i, 0
+                )
                 self._record_waited_prefetch_bytes(
                     step_idx, waited_bytes, total_bytes
                 )
@@ -998,7 +1280,7 @@ class LayerwiseOffloadManager:
                 # Start async prefetch as early as possible in pre-hook.
                 self.prefetch_layer(i, non_blocking=True)
                 self._schedule_prefetch_window(i)
-                self._ensure_layer_ready(i)
+                self._ensure_phase_ready(i, target_phase_idx=0)
                 self._record_prefetch_cp_wait_end(step_idx, i, wait_start)
 
             return hook
@@ -1036,12 +1318,28 @@ class OffloadableDiTMixin:
     layer_names: List[str]
     layerwise_offload_managers: list[LayerwiseOffloadManager] = []
 
+    def get_offload_phase_specs(
+        self, layer_name: str
+    ) -> Sequence[PhaseSpec] | None:
+        return None
+
+    def _get_layerwise_offload_manager(
+        self, layer_name: str
+    ) -> LayerwiseOffloadManager | None:
+        for manager in self.layerwise_offload_managers or []:
+            if manager.layers_attr_str == layer_name and manager.enabled:
+                return manager
+        return None
+
     def configure_layerwise_offload(self, server_args: ServerArgs):
         self.layerwise_offload_managers = []
 
         comm_aware = bool(
             getattr(server_args, "dit_comm_aware_offload", False)
             or _env_bool("SGLANG_DIT_COMM_AWARE_OFFLOAD", False)
+        )
+        phase_aware = bool(
+            comm_aware and _env_bool("SGLANG_DIT_PHASE_AWARE_PREFETCH", False)
         )
         comm_patch_dist = bool(
             getattr(server_args, "dit_comm_aware_patch_torch_dist", False)
@@ -1054,6 +1352,17 @@ class OffloadableDiTMixin:
             "SGLANG_DIT_COMM_PREFETCH_CHUNK_SIZE_MB",
             prefetch_chunk_size_mb,
         )
+        resident_phase_names = _parse_phase_name_csv(
+            getattr(server_args, "dit_offload_resident_phases", "")
+        )
+        resident_phase_names |= _parse_phase_name_csv(
+            _env_str("SGLANG_DIT_OFFLOAD_RESIDENT_PHASES", "")
+        )
+        if resident_phase_names and not phase_aware:
+            logger.info(
+                "Ignoring resident phase config because SGLANG_DIT_PHASE_AWARE_PREFETCH is disabled."
+            )
+            resident_phase_names = set()
 
         for layer_name in self.layer_names:
             module_list = getattr(self, layer_name, None)
@@ -1068,6 +1377,9 @@ class OffloadableDiTMixin:
             else:
                 prefetch_size = int(server_args.dit_offload_prefetch_size)
 
+            phase_specs = (
+                self.get_offload_phase_specs(layer_name) if phase_aware else None
+            )
             manager = LayerwiseOffloadManager(
                 model=self,
                 layers_attr_str=layer_name,
@@ -1078,6 +1390,8 @@ class OffloadableDiTMixin:
                 comm_aware=comm_aware,
                 comm_patch_torch_distributed=comm_patch_dist,
                 prefetch_chunk_size_mb=prefetch_chunk_size_mb,
+                phase_specs=phase_specs,
+                resident_phase_names=resident_phase_names,
                 submodule_granularity=True,
             )
             self.layerwise_offload_managers.append(manager)
@@ -1089,6 +1403,13 @@ class OffloadableDiTMixin:
             logger.info(
                 "Communication-aware chunk-wise offload is enabled "
                 f"(chunk={prefetch_chunk_size_mb}MB, patch_torch_dist={comm_patch_dist})."
+            )
+        if phase_aware:
+            logger.info("Phase-aware prefetch is enabled.")
+        if resident_phase_names:
+            logger.info(
+                "Layerwise offload resident phases requested: %s",
+                sorted(resident_phase_names),
             )
 
     @property
@@ -1114,6 +1435,14 @@ class OffloadableDiTMixin:
             return
         for manager in self.layerwise_offload_managers:
             manager.prepare_for_next_req(non_blocking=True)
+
+    def ensure_offload_phase_ready(
+        self, layer_name: str, layer_idx: int, phase_name: str
+    ) -> None:
+        manager = self._get_layerwise_offload_manager(layer_name)
+        if manager is None or not manager.supports_phase_name(phase_name):
+            return
+        manager.ensure_named_phase_ready(layer_idx, phase_name)
 
     def quiesce_prefetch_for_comm(self) -> None:
         if self.layerwise_offload_managers is None:

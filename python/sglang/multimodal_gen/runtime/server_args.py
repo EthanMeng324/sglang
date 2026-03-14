@@ -297,6 +297,7 @@ class ServerArgs:
     dit_cpu_offload: bool | None = None
     dit_layerwise_offload: bool | None = None
     dit_offload_prefetch_size: float = 0.0
+    dit_offload_resident_phases: str = ""
     text_encoder_cpu_offload: bool | None = None
     image_encoder_cpu_offload: bool | None = None
     vae_cpu_offload: bool | None = None
@@ -797,6 +798,12 @@ class ServerArgs:
             type=float,
             default=ServerArgs.dit_offload_prefetch_size,
             help="The size of prefetch for dit-layerwise-offload. If the value is between 0.0 and 1.0, it is treated as a ratio of the total number of layers. If the value is >= 1, it is treated as the absolute number of layers. 0.0 means prefetch 1 layer (lowest memory). Values above 0.5 might have peak memory close to no offload but worse performance.",
+        )
+        parser.add_argument(
+            "--dit-offload-resident-phases",
+            type=str,
+            default=ServerArgs.dit_offload_resident_phases,
+            help="Comma-separated phase names to keep resident on GPU under comm-aware layerwise offload. Empty means no phase is resident.",
         )
         parser.add_argument(
             "--use-fsdp-inference",

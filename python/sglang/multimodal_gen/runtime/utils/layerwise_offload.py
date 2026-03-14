@@ -1,4 +1,5 @@
 import os
+from dataclasses import dataclass
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -16,6 +17,7 @@ if _USE_CHUNKWISE_IMPL:
     from sglang.multimodal_gen.runtime.utils.layerwise_offload_chunkwise import (
         LayerwiseOffloadManager,
         OffloadableDiTMixin,
+        PhaseSpec,
         iter_materialized_weights,
     )
 else:
@@ -25,9 +27,15 @@ else:
         iter_materialized_weights,
     )
 
+    @dataclass(frozen=True)
+    class PhaseSpec:
+        name: str
+        prefixes: tuple[str, ...]
+
 
 __all__ = [
     "LayerwiseOffloadManager",
     "OffloadableDiTMixin",
+    "PhaseSpec",
     "iter_materialized_weights",
 ]

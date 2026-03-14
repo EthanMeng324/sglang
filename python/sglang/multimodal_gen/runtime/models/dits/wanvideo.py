@@ -56,7 +56,10 @@ from sglang.multimodal_gen.runtime.platforms import (
     current_platform,
 )
 from sglang.multimodal_gen.runtime.server_args import get_global_server_args
-from sglang.multimodal_gen.runtime.utils.layerwise_offload import OffloadableDiTMixin
+from sglang.multimodal_gen.runtime.utils.layerwise_offload import (
+    OffloadableDiTMixin,
+    PhaseSpec,
+)
 from sglang.multimodal_gen.runtime.utils.logging_utils import init_logger
 
 logger = init_logger(__name__)
@@ -439,6 +442,7 @@ class WanTransformerBlock(nn.Module):
         freqs_cis: tuple[torch.Tensor, torch.Tensor],
         mock_comm_fn: Any | None = None,
         block_idx: int | None = None,
+        phase_barrier_fn: Any | None = None,
         mock_comm_stats: dict[str, int] | None = None,
     ) -> torch.Tensor:
         if hidden_states.dim() == 4:
@@ -512,6 +516,8 @@ class WanTransformerBlock(nn.Module):
                 mock_comm_stats["bytes"] = mock_comm_stats.get("bytes", 0) + transferred
 
         attn_output = self.attn1(query, key, value)
+        if phase_barrier_fn is not None and block_idx is not None:
+            phase_barrier_fn(block_idx, "self_attn_tail")
         attn_output = attn_output.flatten(2)
         attn_output, _ = self.to_out(attn_output)
         attn_output = attn_output.squeeze(1)
@@ -527,6 +533,8 @@ class WanTransformerBlock(nn.Module):
         ), hidden_states.to(orig_dtype)
 
         # 2. Cross-attention
+        if phase_barrier_fn is not None and block_idx is not None:
+            phase_barrier_fn(block_idx, "cross_attn")
         attn_output = self.attn2(
             norm_hidden_states, context=encoder_hidden_states, context_lens=None
         )
@@ -538,6 +546,8 @@ class WanTransformerBlock(nn.Module):
         ), hidden_states.to(orig_dtype)
 
         # 3. Feed-forward
+        if phase_barrier_fn is not None and block_idx is not None:
+            phase_barrier_fn(block_idx, "ffn")
         ff_output = self.ffn(norm_hidden_states)
         hidden_states = self.mlp_residual(ff_output, c_gate_msa, hidden_states)
         hidden_states = hidden_states.to(orig_dtype)
@@ -647,6 +657,7 @@ class WanTransformerBlock_VSA(nn.Module):
         freqs_cis: tuple[torch.Tensor, torch.Tensor],
         mock_comm_fn: Any | None = None,
         block_idx: int | None = None,
+        phase_barrier_fn: Any | None = None,
         mock_comm_stats: dict[str, int] | None = None,
     ) -> torch.Tensor:
         if hidden_states.dim() == 4:
@@ -706,6 +717,8 @@ class WanTransformerBlock_VSA(nn.Module):
                 mock_comm_stats["bytes"] = mock_comm_stats.get("bytes", 0) + transferred
 
         attn_output = self.attn1(query, key, value, gate_compress=gate_compress)
+        if phase_barrier_fn is not None and block_idx is not None:
+            phase_barrier_fn(block_idx, "self_attn_tail")
         attn_output = attn_output.flatten(2)
         attn_output, _ = self.to_out(attn_output)
         attn_output = attn_output.squeeze(1)
@@ -719,6 +732,8 @@ class WanTransformerBlock_VSA(nn.Module):
         ), hidden_states.to(orig_dtype)
 
         # 2. Cross-attention
+        if phase_barrier_fn is not None and block_idx is not None:
+            phase_barrier_fn(block_idx, "cross_attn")
         attn_output = self.attn2(
             norm_hidden_states, context=encoder_hidden_states, context_lens=None
         )
@@ -730,6 +745,8 @@ class WanTransformerBlock_VSA(nn.Module):
         ), hidden_states.to(orig_dtype)
 
         # 3. Feed-forward
+        if phase_barrier_fn is not None and block_idx is not None:
+            phase_barrier_fn(block_idx, "ffn")
         ff_output = self.ffn(norm_hidden_states)
         hidden_states = self.mlp_residual(ff_output, c_gate_msa, hidden_states)
         hidden_states = hidden_states.to(orig_dtype)
@@ -744,6 +761,42 @@ class WanTransformer3DModel(CachableDiT, OffloadableDiTMixin):
     param_names_mapping = WanVideoConfig().param_names_mapping
     reverse_param_names_mapping = WanVideoConfig().reverse_param_names_mapping
     lora_param_names_mapping = WanVideoConfig().lora_param_names_mapping
+    BLOCK_PHASE_SPECS: tuple[PhaseSpec, ...] = (
+        PhaseSpec(
+            name="entry",
+            prefixes=(
+                "scale_shift_table",
+                "norm1",
+                "to_q",
+                "to_k",
+                "to_v",
+                "to_gate_compress",
+                "norm_q",
+                "norm_k",
+            ),
+        ),
+        PhaseSpec(
+            name="self_attn_tail",
+            prefixes=(
+                "to_out",
+                "self_attn_residual_norm",
+            ),
+        ),
+        PhaseSpec(
+            name="cross_attn",
+            prefixes=(
+                "attn2",
+                "cross_attn_residual_norm",
+            ),
+        ),
+        PhaseSpec(
+            name="ffn",
+            prefixes=(
+                "ffn",
+                "mlp_residual",
+            ),
+        ),
+    )
 
     def __init__(self, config: WanVideoConfig, hf_config: dict[str, Any]) -> None:
         super().__init__(config=config, hf_config=hf_config)
@@ -889,6 +942,15 @@ class WanTransformer3DModel(CachableDiT, OffloadableDiTMixin):
                 f"traffic_scale={self._mock_comm_traffic_scale}, "
                 f"max_mb={self._mock_comm_max_mb})."
             )
+
+    def get_offload_phase_specs(self, layer_name: str):
+        if layer_name == "blocks":
+            return self.BLOCK_PHASE_SPECS
+        return super().get_offload_phase_specs(layer_name)
+
+    @torch.compiler.disable
+    def _ensure_block_phase_ready(self, block_idx: int, phase_name: str) -> None:
+        self.ensure_offload_phase_ready("blocks", block_idx, phase_name)
 
     def _mock_comm_event_loop(self) -> None:
         if self._mock_comm_event_q is None:
@@ -1226,6 +1288,7 @@ class WanTransformer3DModel(CachableDiT, OffloadableDiTMixin):
                     freqs_cis,
                     mock_comm_fn=self._maybe_mock_communication,
                     block_idx=block_idx,
+                    phase_barrier_fn=self._ensure_block_phase_ready,
                     mock_comm_stats=mock_comm_stats,
                 )
             if self._mock_comm_debug and mock_comm_stats["calls"] > 0:
