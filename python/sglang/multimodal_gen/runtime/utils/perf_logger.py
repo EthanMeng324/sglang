@@ -52,6 +52,9 @@ class RequestMetrics:
         self.request_id = request_id
         self.stages: Dict[str, float] = {}
         self.steps: list[float] = []
+        self._pending_step_cuda_events: list[
+            tuple[torch.cuda.Event, torch.cuda.Event]
+        ] = []
         self.total_duration_ms: float = 0.0
         # memory tracking: {checkpoint_name: MemorySnapshot}
         self.memory_snapshots: Dict[str, MemorySnapshot] = {}
@@ -70,6 +73,27 @@ class RequestMetrics:
         assert index == len(self.steps)
         self.steps.append(duration_s * 1000)
 
+    def record_step_cuda_events(
+        self,
+        index: int,
+        start_event: torch.cuda.Event,
+        end_event: torch.cuda.Event,
+    ) -> None:
+        """Records a denoising step using CUDA events and finalizes later."""
+        assert index == len(self.steps) + len(self._pending_step_cuda_events)
+        self._pending_step_cuda_events.append((start_event, end_event))
+
+    def finalize_pending_step_timings(self) -> None:
+        if not self._pending_step_cuda_events:
+            return
+
+        # Waiting on the final end-event is enough to make elapsed_time() valid
+        # for all prior events from the same request.
+        self._pending_step_cuda_events[-1][1].synchronize()
+        for start_event, end_event in self._pending_step_cuda_events:
+            self.steps.append(float(start_event.elapsed_time(end_event)))
+        self._pending_step_cuda_events.clear()
+
     def record_memory_snapshot(self, checkpoint_name: str, snapshot: MemorySnapshot):
         self.memory_snapshots[checkpoint_name] = snapshot
 
@@ -78,6 +102,7 @@ class RequestMetrics:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes the metrics data to a dictionary."""
+        self.finalize_pending_step_timings()
         return {
             "request_id": self.request_id,
             "stages": self.stages,
@@ -205,6 +230,22 @@ class StageProfiler:
         self.log_timing = perf_dump_path_provided or envs.SGLANG_DIFFUSION_STAGE_LOGGING
         self.log_stage_start_end = log_stage_start_end
         self.capture_memory = capture_memory
+        self._is_denoising_step = self.stage_name.startswith("denoising_step_")
+        self._sync_step_timing = bool(
+            self._is_denoising_step
+            and torch.cuda.is_available()
+            and os.environ.get("SGLANG_DIFFUSION_SYNC_STAGE_PROFILING", "0") == "1"
+        )
+        self._cuda_event_step_timing = bool(
+            self._is_denoising_step
+            and self.metrics is not None
+            and torch.cuda.is_available()
+            and not self._sync_step_timing
+            and os.environ.get("SGLANG_DIFFUSION_CUDA_EVENT_STEP_PROFILING", "1")
+            == "1"
+        )
+        self._step_start_event: torch.cuda.Event | None = None
+        self._step_end_event: torch.cuda.Event | None = None
 
     def __enter__(self):
         if self.log_stage_start_end:
@@ -214,12 +255,18 @@ class StageProfiler:
             self.logger.info(msg)
 
         if (self.log_timing and self.metrics) or self.log_stage_start_end:
-            if (
-                os.environ.get("SGLANG_DIFFUSION_SYNC_STAGE_PROFILING", "0") == "1"
-                and self.stage_name.startswith("denoising_step_")
-                and torch.cuda.is_available()
-            ):
+            if self._sync_step_timing:
                 torch.cuda.synchronize()
+                if self.metrics is not None:
+                    self.metrics.record_extra(
+                        "denoising_step_timing_source", "host_sync"
+                    )
+            elif self._cuda_event_step_timing:
+                self._step_start_event = torch.cuda.Event(enable_timing=True)
+                self._step_start_event.record(torch.cuda.current_stream())
+                self.metrics.record_extra("denoising_step_timing_source", "cuda_event")
+            elif self._is_denoising_step and self.metrics is not None:
+                self.metrics.record_extra("denoising_step_timing_source", "host_async")
             self.start_time = time.perf_counter()
 
         return self
@@ -228,12 +275,11 @@ class StageProfiler:
         if not ((self.log_timing and self.metrics) or self.log_stage_start_end):
             return False
 
-        if (
-            os.environ.get("SGLANG_DIFFUSION_SYNC_STAGE_PROFILING", "0") == "1"
-            and self.stage_name.startswith("denoising_step_")
-            and torch.cuda.is_available()
-        ):
+        if self._sync_step_timing:
             torch.cuda.synchronize()
+        elif self._cuda_event_step_timing and self._step_start_event is not None:
+            self._step_end_event = torch.cuda.Event(enable_timing=True)
+            self._step_end_event.record(torch.cuda.current_stream())
         execution_time_s = time.perf_counter() - self.start_time
 
         if exc_type:
@@ -252,9 +298,18 @@ class StageProfiler:
             )
 
         if self.log_timing and self.metrics:
-            if "denoising_step_" in self.stage_name:
+            if self._is_denoising_step:
                 index = int(self.stage_name[len("denoising_step_") :])
-                self.metrics.record_steps(index, execution_time_s)
+                if (
+                    self._cuda_event_step_timing
+                    and self._step_start_event is not None
+                    and self._step_end_event is not None
+                ):
+                    self.metrics.record_step_cuda_events(
+                        index, self._step_start_event, self._step_end_event
+                    )
+                else:
+                    self.metrics.record_steps(index, execution_time_s)
             else:
                 self.metrics.record_stage(self.stage_name, execution_time_s)
 
@@ -289,6 +344,7 @@ class PerformanceLogger:
         Static method to dump a standardized benchmark report to a file.
         Eliminates duplicate logic in CLI/Client code.
         """
+        metrics.finalize_pending_step_timings()
         formatted_steps = [
             {"name": name, "duration_ms": duration_ms}
             for name, duration_ms in metrics.stages.items()
@@ -337,6 +393,7 @@ class PerformanceLogger:
 
         Note that this accords to the time spent internally in server, postprocess is not included
         """
+        metrics.finalize_pending_step_timings()
         formatted_stages = [
             {"name": name, "execution_time_ms": duration_ms}
             for name, duration_ms in metrics.stages.items()

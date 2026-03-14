@@ -613,6 +613,9 @@ class OffloadableDiTMixin:
     layer_names: List[str]
     layerwise_offload_managers: list[LayerwiseOffloadManager] = []
 
+    def get_offload_phase_specs(self, layer_name: str):
+        return None
+
     def configure_layerwise_offload(self, server_args: ServerArgs):
         self.layerwise_offload_managers = []
         for layer_name in self.layer_names:
@@ -648,6 +651,11 @@ class OffloadableDiTMixin:
             return
         for manager in self.layerwise_offload_managers:
             manager.prepare_for_next_req(non_blocking=True)
+
+    def ensure_offload_phase_ready(
+        self, layer_name: str, layer_idx: int, phase_name: str
+    ) -> None:
+        return
 
     def quiesce_prefetch_for_comm(self) -> None:
         if self.layerwise_offload_managers is None:
