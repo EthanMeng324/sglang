@@ -298,6 +298,7 @@ class ServerArgs:
     dit_layerwise_offload: bool | None = None
     dit_offload_prefetch_size: float = 0.0
     dit_offload_resident_phases: str = ""
+    dit_offload_phase_prefetch_depth: int = 4
     text_encoder_cpu_offload: bool | None = None
     image_encoder_cpu_offload: bool | None = None
     vae_cpu_offload: bool | None = None
@@ -806,6 +807,14 @@ class ServerArgs:
             help="Comma-separated phase names to keep resident on GPU under comm-aware layerwise offload. Empty means no phase is resident.",
         )
         parser.add_argument(
+            "--dit-offload-phase-prefetch-depth",
+            type=int,
+            default=ServerArgs.dit_offload_phase_prefetch_depth,
+            help="Under phase-aware layerwise offload, how many phases per layer may be prefetched ahead. "
+            "1 keeps only the minimal required phase ready; larger values allow more lookahead. "
+            "Using 4 matches the current Wan block phase count and effectively permits whole-layer prefetch.",
+        )
+        parser.add_argument(
             "--use-fsdp-inference",
             action=StoreBoolean,
             help="Use FSDP for inference by sharding the model weights. Latency is very low due to prefetch--enable if run out of memory.",
@@ -1098,6 +1107,11 @@ class ServerArgs:
         if self.dit_layerwise_offload:
             if self.dit_offload_prefetch_size < 0.0:
                 raise ValueError("dit_offload_prefetch_size must be non-negative")
+            if self.dit_offload_phase_prefetch_depth < 1:
+                logger.info(
+                    "Invalid --dit-offload-phase-prefetch-depth value passed, clamped to 1."
+                )
+                self.dit_offload_phase_prefetch_depth = 1
 
             if self.use_fsdp_inference:
                 logger.warning(
