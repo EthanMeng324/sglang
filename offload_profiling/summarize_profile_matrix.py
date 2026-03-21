@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import sqlite3
 import subprocess
@@ -64,6 +65,55 @@ def env_float(name: str) -> float | None:
         return float(raw)
     except ValueError:
         return None
+
+
+def load_json(path: Path | None) -> dict:
+    if path is None or not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {}
+
+
+def find_perf_json(run: str, trace_path: Path) -> Path | None:
+    exact_names = {
+        "new": ["perf_new_offload_profiled.json", "perf_new_offload.json"],
+        "old": ["perf_old_offload_profiled.json", "perf_old_offload.json"],
+        "no": ["perf_no_offload_profiled.json", "perf_no_offload.json"],
+        "phase": ["perf_phase_offload_profiled.json", "perf_phase_offload.json"],
+    }
+    profiles_dir = trace_path.parent
+    results_dir = profiles_dir.parent
+    for root in (profiles_dir, results_dir):
+        for name in exact_names[run]:
+            path = root / name
+            if path.exists():
+                return path
+    for root in (profiles_dir, results_dir):
+        matches = sorted(root.glob(f"perf_{run}*.json"))
+        if matches:
+            return matches[-1]
+    return None
+
+
+def extract_peak_memory_mb(perf: dict) -> float | None:
+    checkpoints = perf.get("memory_checkpoints")
+    if isinstance(checkpoints, dict):
+        for key in ("mem_analysis", "after_forward", "before_forward"):
+            value = checkpoints.get(key)
+            if not isinstance(value, dict):
+                continue
+            peak_reserved = value.get("peak_reserved_mb")
+            if isinstance(peak_reserved, (int, float)):
+                return float(peak_reserved)
+            peak_allocated = value.get("peak_allocated_mb")
+            if isinstance(peak_allocated, (int, float)):
+                return float(peak_allocated)
+    peak_memory = perf.get("peak_memory_mb")
+    if isinstance(peak_memory, (int, float)):
+        return float(peak_memory)
+    return None
 
 
 def is_valid_sqlite(path: Path) -> bool:
@@ -171,6 +221,8 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
         path: Path = getattr(args, key)
         step_override = env_float(f"{key.upper()}_STEP_TIME_S")
         peak_override = env_float(f"{key.upper()}_PEAK_MEMORY_MB")
+        perf_path = find_perf_json(key, path)
+        perf_json = load_json(perf_path)
         step_time_s = step_override
         step_source = "env_override" if step_override is not None else None
         trace_status = "not_checked"
@@ -185,6 +237,16 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
                 trace_status = f"unreadable: {exc}"
         else:
             trace_status = "override_only"
+        peak_memory_mb = peak_override
+        if peak_memory_mb is not None:
+            peak_source = "env_override"
+        else:
+            peak_memory_mb = extract_peak_memory_mb(perf_json)
+            peak_source = (
+                f"perf_json:{perf_path.name}"
+                if peak_memory_mb is not None and perf_path is not None
+                else "unavailable"
+            )
         rows.append(
             {
                 "run": key,
@@ -193,8 +255,8 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
                 "trace_status": trace_status,
                 "step_time_s": step_time_s,
                 "step_source": step_source or "unavailable",
-                "peak_memory_mb": peak_override,
-                "peak_source": "env_override" if peak_override is not None else "unavailable",
+                "peak_memory_mb": peak_memory_mb,
+                "peak_source": peak_source,
             }
         )
     return rows
