@@ -150,6 +150,9 @@ class LayerwiseOffloadManager:
         ] = {}
         # GPU resident layers
         self._gpu_layers: Set[int] = set()
+        # dtype -> shared placeholder used when an offloaded tensor is detached from
+        # its materialized GPU storage. Reusing these avoids allocator churn.
+        self._gpu_placeholders: Dict[torch.dtype, torch.Tensor] = {}
 
         self._named_parameters: Dict[str, torch.nn.Parameter] = {}
         self._named_buffers: Dict[str, torch.Tensor] = {}
@@ -318,6 +321,13 @@ class LayerwiseOffloadManager:
         self._scheduled_layers.discard(layer_idx)
         if self._urgent_layer == layer_idx:
             self._urgent_layer = None
+
+    def _placeholder_tensor(self, dtype: torch.dtype) -> torch.Tensor:
+        placeholder = self._gpu_placeholders.get(dtype)
+        if placeholder is None:
+            placeholder = torch.empty((1,), device=self.device, dtype=dtype)
+            self._gpu_placeholders[dtype] = placeholder
+        return placeholder
 
     def _mark_layer_complete_locked(self, layer_idx: int) -> None:
         if layer_idx in self._prefetch_events:
@@ -1098,9 +1108,7 @@ class LayerwiseOffloadManager:
                         }
 
                         if not resident_phase:
-                            weight.data = torch.empty(
-                                (1,), device=self.device, dtype=dtype
-                            )
+                            weight.data = self._placeholder_tensor(dtype)
                         current_offset += numel
 
                     self._consolidated_cpu_weights[layer_idx][phase_idx][
@@ -1193,7 +1201,7 @@ class LayerwiseOffloadManager:
             if meta.get("resident", False) or int(meta["phase_id"]) != phase_idx:
                 continue
             target = self.get_target_with_name(name)
-            target.data = torch.empty((1,), device=self.device, dtype=meta["dtype"])
+            target.data = self._placeholder_tensor(meta["dtype"])
 
         layer_gpu_buffers = self._prefetch_gpu_buffers.get(layer_idx)
         if layer_gpu_buffers is not None:
@@ -1237,7 +1245,7 @@ class LayerwiseOffloadManager:
                 if meta.get("resident", False):
                     continue
                 target = self.get_target_with_name(name)
-                target.data = torch.empty((1,), device=self.device, dtype=meta["dtype"])
+                target.data = self._placeholder_tensor(meta["dtype"])
 
             self._prefetch_events.pop(layer_idx, None)
             self._phase_events.pop(layer_idx, None)
