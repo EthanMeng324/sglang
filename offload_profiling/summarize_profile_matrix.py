@@ -97,7 +97,9 @@ def find_perf_json(run: str, trace_path: Path) -> Path | None:
     return None
 
 
-def extract_peak_memory_mb(perf: dict) -> float | None:
+def extract_peak_memory_pair(perf: dict) -> tuple[float | None, float | None]:
+    peak_reserved_mb = None
+    peak_allocated_mb = None
     checkpoints = perf.get("memory_checkpoints")
     if isinstance(checkpoints, dict):
         for key in ("mem_analysis", "after_forward", "before_forward"):
@@ -105,15 +107,15 @@ def extract_peak_memory_mb(perf: dict) -> float | None:
             if not isinstance(value, dict):
                 continue
             peak_reserved = value.get("peak_reserved_mb")
-            if isinstance(peak_reserved, (int, float)):
-                return float(peak_reserved)
+            if peak_reserved_mb is None and isinstance(peak_reserved, (int, float)):
+                peak_reserved_mb = float(peak_reserved)
             peak_allocated = value.get("peak_allocated_mb")
-            if isinstance(peak_allocated, (int, float)):
-                return float(peak_allocated)
+            if peak_allocated_mb is None and isinstance(peak_allocated, (int, float)):
+                peak_allocated_mb = float(peak_allocated)
     peak_memory = perf.get("peak_memory_mb")
-    if isinstance(peak_memory, (int, float)):
-        return float(peak_memory)
-    return None
+    if peak_reserved_mb is None and isinstance(peak_memory, (int, float)):
+        peak_reserved_mb = float(peak_memory)
+    return peak_reserved_mb, peak_allocated_mb
 
 
 def is_valid_sqlite(path: Path) -> bool:
@@ -220,9 +222,15 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
     for key in ["no", "old", "new", "phase"]:
         path: Path = getattr(args, key)
         step_override = env_float(f"{key.upper()}_STEP_TIME_S")
-        peak_override = env_float(f"{key.upper()}_PEAK_MEMORY_MB")
+        peak_reserved_override = env_float(f"{key.upper()}_PEAK_RESERVED_MB")
+        if peak_reserved_override is None:
+            peak_reserved_override = env_float(f"{key.upper()}_PEAK_MEMORY_MB")
+        peak_allocated_override = env_float(f"{key.upper()}_PEAK_ALLOCATED_MB")
         perf_path = find_perf_json(key, path)
         perf_json = load_json(perf_path)
+        perf_peak_reserved_mb, perf_peak_allocated_mb = extract_peak_memory_pair(
+            perf_json
+        )
         step_time_s = step_override
         step_source = "env_override" if step_override is not None else None
         trace_status = "not_checked"
@@ -237,14 +245,25 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
                 trace_status = f"unreadable: {exc}"
         else:
             trace_status = "override_only"
-        peak_memory_mb = peak_override
-        if peak_memory_mb is not None:
-            peak_source = "env_override"
+        peak_reserved_mb = peak_reserved_override
+        if peak_reserved_mb is not None:
+            peak_reserved_source = "env_override"
         else:
-            peak_memory_mb = extract_peak_memory_mb(perf_json)
-            peak_source = (
+            peak_reserved_mb = perf_peak_reserved_mb
+            peak_reserved_source = (
                 f"perf_json:{perf_path.name}"
-                if peak_memory_mb is not None and perf_path is not None
+                if peak_reserved_mb is not None and perf_path is not None
+                else "unavailable"
+            )
+
+        peak_allocated_mb = peak_allocated_override
+        if peak_allocated_mb is not None:
+            peak_allocated_source = "env_override"
+        else:
+            peak_allocated_mb = perf_peak_allocated_mb
+            peak_allocated_source = (
+                f"perf_json:{perf_path.name}"
+                if peak_allocated_mb is not None and perf_path is not None
                 else "unavailable"
             )
         rows.append(
@@ -255,8 +274,10 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
                 "trace_status": trace_status,
                 "step_time_s": step_time_s,
                 "step_source": step_source or "unavailable",
-                "peak_memory_mb": peak_memory_mb,
-                "peak_source": peak_source,
+                "peak_reserved_mb": peak_reserved_mb,
+                "peak_reserved_source": peak_reserved_source,
+                "peak_allocated_mb": peak_allocated_mb,
+                "peak_allocated_source": peak_allocated_source,
             }
         )
     return rows
@@ -274,8 +295,10 @@ def write_csv(rows: list[dict[str, object]], path: Path) -> None:
                 "trace_status",
                 "step_time_s",
                 "step_source",
-                "peak_memory_mb",
-                "peak_source",
+                "peak_reserved_mb",
+                "peak_reserved_source",
+                "peak_allocated_mb",
+                "peak_allocated_source",
             ],
         )
         writer.writeheader()
@@ -286,7 +309,8 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     by_run = {row["run"]: row for row in rows}
     base_step = by_run["no"]["step_time_s"]
-    base_mem = by_run["no"]["peak_memory_mb"]
+    base_peak_reserved = by_run["no"]["peak_reserved_mb"]
+    base_peak_allocated = by_run["no"]["peak_allocated_mb"]
 
     lines = [
         "# Offload Profile Summary",
@@ -310,9 +334,9 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
 
     lines += [
         "",
-        "## Peak Memory",
+        "## Peak Reserved Memory",
         "",
-        "| Profile | Peak Memory (MB) | Delta vs No (MB) | Ratio vs No | Source |",
+        "| Profile | Peak Reserved (MB) | Delta vs No (MB) | Ratio vs No | Source |",
         "|---|---:|---:|---:|---|",
     ]
     for key in ["no", "old", "new", "phase"]:
@@ -320,10 +344,29 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
         lines.append(
             "| {label} | {mem} | {delta} | {ratio} | {source} |".format(
                 label=row["label"],
-                mem=fmt(row["peak_memory_mb"], 0),
-                delta=fmt(delta(base_mem, row["peak_memory_mb"]), 0),
-                ratio=fmt(ratio(base_mem, row["peak_memory_mb"]), 2),
-                source=row["peak_source"],
+                mem=fmt(row["peak_reserved_mb"], 0),
+                delta=fmt(delta(base_peak_reserved, row["peak_reserved_mb"]), 0),
+                ratio=fmt(ratio(base_peak_reserved, row["peak_reserved_mb"]), 2),
+                source=row["peak_reserved_source"],
+            )
+        )
+
+    lines += [
+        "",
+        "## Peak Allocated Memory",
+        "",
+        "| Profile | Peak Allocated (MB) | Delta vs No (MB) | Ratio vs No | Source |",
+        "|---|---:|---:|---:|---|",
+    ]
+    for key in ["no", "old", "new", "phase"]:
+        row = by_run[key]
+        lines.append(
+            "| {label} | {mem} | {delta} | {ratio} | {source} |".format(
+                label=row["label"],
+                mem=fmt(row["peak_allocated_mb"], 0),
+                delta=fmt(delta(base_peak_allocated, row["peak_allocated_mb"]), 0),
+                ratio=fmt(ratio(base_peak_allocated, row["peak_allocated_mb"]), 2),
+                source=row["peak_allocated_source"],
             )
         )
 
