@@ -1,3 +1,5 @@
+NUM_FRAMES=$1
+export NUM_FRAMES
 bash offload_profiling/run_access.sh
 bash offload_profiling/run_access_old.sh
 bash offload_profiling/run_access_no.sh
