@@ -118,6 +118,13 @@ def extract_peak_memory_pair(perf: dict) -> tuple[float | None, float | None]:
     return peak_reserved_mb, peak_allocated_mb
 
 
+def extract_total_duration_ms(perf: dict) -> float | None:
+    total_duration_ms = perf.get("total_duration_ms")
+    if isinstance(total_duration_ms, (int, float)):
+        return float(total_duration_ms)
+    return None
+
+
 def is_valid_sqlite(path: Path) -> bool:
     if not path.exists() or path.stat().st_size == 0:
         return False
@@ -231,6 +238,7 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
         perf_peak_reserved_mb, perf_peak_allocated_mb = extract_peak_memory_pair(
             perf_json
         )
+        perf_total_duration_ms = extract_total_duration_ms(perf_json)
         step_time_s = step_override
         step_source = "env_override" if step_override is not None else None
         trace_status = "not_checked"
@@ -266,6 +274,11 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
                 if peak_allocated_mb is not None and perf_path is not None
                 else "unavailable"
             )
+        total_duration_source = (
+            f"perf_json:{perf_path.name}"
+            if perf_total_duration_ms is not None and perf_path is not None
+            else "unavailable"
+        )
         rows.append(
             {
                 "run": key,
@@ -274,6 +287,8 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
                 "trace_status": trace_status,
                 "step_time_s": step_time_s,
                 "step_source": step_source or "unavailable",
+                "total_duration_ms": perf_total_duration_ms,
+                "total_duration_source": total_duration_source,
                 "peak_reserved_mb": peak_reserved_mb,
                 "peak_reserved_source": peak_reserved_source,
                 "peak_allocated_mb": peak_allocated_mb,
@@ -295,6 +310,8 @@ def write_csv(rows: list[dict[str, object]], path: Path) -> None:
                 "trace_status",
                 "step_time_s",
                 "step_source",
+                "total_duration_ms",
+                "total_duration_source",
                 "peak_reserved_mb",
                 "peak_reserved_source",
                 "peak_allocated_mb",
@@ -309,6 +326,7 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     by_run = {row["run"]: row for row in rows}
     base_step = by_run["no"]["step_time_s"]
+    base_total_duration = by_run["no"]["total_duration_ms"]
     base_peak_reserved = by_run["no"]["peak_reserved_mb"]
     base_peak_allocated = by_run["no"]["peak_allocated_mb"]
 
@@ -329,6 +347,25 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
                 delta=fmt(delta(base_step, row["step_time_s"]), 3),
                 ratio=fmt(ratio(base_step, row["step_time_s"]), 2),
                 source=row["step_source"],
+            )
+        )
+
+    lines += [
+        "",
+        "## Total Duration",
+        "",
+        "| Profile | Total Duration (ms) | Delta vs No (ms) | Ratio vs No | Source |",
+        "|---|---:|---:|---:|---|",
+    ]
+    for key in ["no", "old", "new", "phase"]:
+        row = by_run[key]
+        lines.append(
+            "| {label} | {duration} | {delta} | {ratio} | {source} |".format(
+                label=row["label"],
+                duration=fmt(row["total_duration_ms"], 3),
+                delta=fmt(delta(base_total_duration, row["total_duration_ms"]), 3),
+                ratio=fmt(ratio(base_total_duration, row["total_duration_ms"]), 2),
+                source=row["total_duration_source"],
             )
         )
 
