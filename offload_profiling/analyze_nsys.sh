@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+module purge
+module load Miniforge3/25.3.0-3
+module load CUDA/12.8.0
+module load GCC/12.3.0
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULTS_DIR="${RESULTS_DIR:-$SCRIPT_DIR/results}"
 PROFILES_DIR="${PROFILES_DIR:-$RESULTS_DIR/profiles}"
