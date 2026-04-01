@@ -87,6 +87,26 @@ export SGLANG_WAN_MOCK_COMM_TRAFFIC_SCALE="${SGLANG_WAN_MOCK_COMM_TRAFFIC_SCALE:
 export SGLANG_WAN_MOCK_COMM_MAX_MB="${SGLANG_WAN_MOCK_COMM_MAX_MB:-256}"
 export SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES="${SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES:-0}"
 
+if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    WARMUP_OUT="${WARMUP_OUT:-${MODEL_RESULTS_DIR:-$RESULTS_DIR}/warmup_${PROFILE_MODEL}.$([[ "$PROFILE_MODEL" == "flux" ]] && printf '%s' png || printf '%s' mp4)}"
+
+    echo "=========================================="
+    echo "RUN: Warmup dry run (no offload)"
+    echo "=========================================="
+    echo "Start: $(date)"
+    echo "Profile model: ${PROFILE_MODEL}"
+    echo "Output: ${WARMUP_OUT}"
+
+    time sglang generate "${COMMON_FLAGS[@]}" \
+        --output-path "$WARMUP_OUT"
+
+    echo "End: $(date)"
+    echo ""
+    echo "Warmup complete."
+    echo "  - Artifact: ${WARMUP_OUT}"
+    exit 0
+fi
+
 echo "=========================================="
 echo "RUN: Profiled run (nsys)"
 echo "=========================================="

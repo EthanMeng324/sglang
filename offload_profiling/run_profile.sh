@@ -15,6 +15,7 @@ Supported models:
   flux
 
 Notes:
+  - A no-offload dry run with 1 denoising step is executed first for warmup
   - This wrapper runs: no -> old -> new -> phase -> analyze
   - Extra settings can still be passed through env vars, e.g. HEIGHT/WIDTH/NUM_GPUS
 EOF
@@ -77,6 +78,20 @@ run_step() {
     echo ""
 }
 
+run_step_with_env() {
+    local label="$1"
+    local script_name="$2"
+    shift 2
+    echo "------------------------------------------"
+    echo "STEP: ${label}"
+    echo "------------------------------------------"
+    env "$@" bash "$SCRIPT_DIR/$script_name" "$PROFILE_MODEL"
+    echo ""
+}
+
+run_step_with_env "Warmup Dry Run" "run_access_no.sh" \
+    DRY_RUN=1 \
+    NUM_INFERENCE_STEPS=1
 run_step "No Offload" "run_access_no.sh"
 run_step "Old Offload" "run_access_old.sh"
 run_step "Comm-Aware Offload" "run_access.sh"
