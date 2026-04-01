@@ -65,9 +65,18 @@ if [[ -n "${GUIDANCE_SCALE_2:-}" ]]; then
     COMMON_FLAGS+=(--guidance-scale-2 "$GUIDANCE_SCALE_2")
 fi
 
-# if [[ "${SGLANG_ENABLE_TORCH_COMPILE:-0}" == "1" ]]; then
+ENABLE_TORCH_COMPILE="${ENABLE_TORCH_COMPILE:-}"
+if [[ -z "$ENABLE_TORCH_COMPILE" ]]; then
+    if [[ "${DISABLE_TORCH_COMPILE:-0}" == "1" ]]; then
+        ENABLE_TORCH_COMPILE="0"
+    else
+        ENABLE_TORCH_COMPILE="1"
+    fi
+fi
+
+if [[ "$ENABLE_TORCH_COMPILE" == "1" ]]; then
     COMMON_FLAGS+=(--enable-torch-compile)
-# fi
+fi
 
 export PYTHONUNBUFFERED=1
 

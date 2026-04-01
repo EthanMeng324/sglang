@@ -69,9 +69,18 @@ if [[ -n "${DIT_CPU_OFFLOAD_OVERRIDE:-}" ]]; then
     COMMON_FLAGS+=(--dit-cpu-offload "$DIT_CPU_OFFLOAD_OVERRIDE")
 fi
 
-# if [[ "${SGLANG_ENABLE_TORCH_COMPILE:-0}" == "1" ]]; then
+ENABLE_TORCH_COMPILE="${ENABLE_TORCH_COMPILE:-}"
+if [[ -z "$ENABLE_TORCH_COMPILE" ]]; then
+    if [[ "${DISABLE_TORCH_COMPILE:-0}" == "1" ]]; then
+        ENABLE_TORCH_COMPILE="0"
+    else
+        ENABLE_TORCH_COMPILE="1"
+    fi
+fi
+
+if [[ "$ENABLE_TORCH_COMPILE" == "1" ]]; then
     COMMON_FLAGS+=(--enable-torch-compile)
-# fi
+fi
 
 export PYTHONUNBUFFERED=1
 
