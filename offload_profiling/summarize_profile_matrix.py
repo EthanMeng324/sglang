@@ -21,6 +21,8 @@ DEFAULT_PROFILES = {
     "phase": Path("offload_profiling/results/profiles/phase_offload_nsys.nsys-rep"),
 }
 
+MAIN_RUNS = ["no", "old", "new", "phase"]
+
 LABELS = {
     "no": "No Offload",
     "old": "Old",
@@ -105,6 +107,29 @@ def find_perf_json(run: str, trace_path: Path) -> Path | None:
         matches = sorted(root.glob(f"perf_{run}*.json"))
         if matches:
             return matches[-1]
+    return None
+
+
+def find_warmup_perf_json(trace_path: Path) -> Path | None:
+    profiles_dir = trace_path.parent
+    if trace_path.suffix == ".sqlite" and profiles_dir.name == "sqlite_cache":
+        profiles_dir = profiles_dir.parent.parent
+    results_dir = profiles_dir.parent
+    model_name = profiles_dir.name if profiles_dir.name not in {"profiles", "results"} else ""
+
+    candidate_names = [
+        f"perf_{model_name}_warmup_no_offload_profiled.json" if model_name else "",
+        f"perf_{model_name}_warmup_no_offload.json" if model_name else "",
+        "perf_warmup_no_offload_profiled.json",
+        "perf_warmup_no_offload.json",
+    ]
+    for root in (profiles_dir, results_dir):
+        for name in candidate_names:
+            if not name:
+                continue
+            path = root / name
+            if path.exists():
+                return path
     return None
 
 
@@ -276,7 +301,7 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
     rows = []
     export_dir = args.export_dir
     export_dir.mkdir(parents=True, exist_ok=True)
-    for key in ["no", "old", "new", "phase"]:
+    for key in MAIN_RUNS:
         path: Path = getattr(args, key)
         step_override = env_float(f"{key.upper()}_STEP_TIME_S")
         peak_reserved_override = env_float(f"{key.upper()}_PEAK_RESERVED_MB")
@@ -366,6 +391,54 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
                 "peak_allocated_source": peak_allocated_source,
             }
         )
+
+    warmup_perf_path = find_warmup_perf_json(getattr(args, "no"))
+    warmup_perf_json = load_json(warmup_perf_path)
+    warmup_peak_reserved_mb, warmup_peak_allocated_mb = extract_peak_memory_pair(
+        warmup_perf_json
+    )
+    warmup_total_duration_ms = extract_total_duration_ms(warmup_perf_json)
+    if (
+        warmup_perf_path is not None
+        or warmup_peak_reserved_mb is not None
+        or warmup_peak_allocated_mb is not None
+        or warmup_total_duration_ms is not None
+    ):
+        rows.append(
+            {
+                "run": "warmup",
+                "label": "Warmup (Full-Resident)",
+                "path": str(warmup_perf_path) if warmup_perf_path is not None else "",
+                "trace_status": "perf_only",
+                "step_time_s": None,
+                "step_time_raw_s": None,
+                "step_source": "unavailable",
+                "switch_step_idx": None,
+                "switch_step_time_s": None,
+                "steady_step_count": None,
+                "total_duration_ms": warmup_total_duration_ms,
+                "total_duration_source": (
+                    f"perf_json:{warmup_perf_path.name}"
+                    if warmup_total_duration_ms is not None
+                    and warmup_perf_path is not None
+                    else "unavailable"
+                ),
+                "peak_reserved_mb": warmup_peak_reserved_mb,
+                "peak_reserved_source": (
+                    f"perf_json:{warmup_perf_path.name}"
+                    if warmup_peak_reserved_mb is not None
+                    and warmup_perf_path is not None
+                    else "unavailable"
+                ),
+                "peak_allocated_mb": warmup_peak_allocated_mb,
+                "peak_allocated_source": (
+                    f"perf_json:{warmup_perf_path.name}"
+                    if warmup_peak_allocated_mb is not None
+                    and warmup_perf_path is not None
+                    else "unavailable"
+                ),
+            }
+        )
     return rows
 
 
@@ -400,6 +473,7 @@ def write_csv(rows: list[dict[str, object]], path: Path) -> None:
 def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     by_run = {row["run"]: row for row in rows}
+    warmup_row = by_run.get("warmup")
     base_step = by_run["no"]["step_time_s"]
     base_total_duration = by_run["no"]["total_duration_ms"]
     base_peak_reserved = by_run["no"]["peak_reserved_mb"]
@@ -413,7 +487,7 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
         "| Profile | Step Time (s) | Delta vs No (s) | Ratio vs No | Source |",
         "|---|---:|---:|---:|---|",
     ]
-    for key in ["no", "old", "new", "phase"]:
+    for key in MAIN_RUNS:
         row = by_run[key]
         lines.append(
             "| {label} | {step} | {delta} | {ratio} | {source} |".format(
@@ -434,7 +508,7 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
         "| Profile | Switch Step | Step Time (s) | Raw Mean incl. Switch (s) | Used Steps |",
         "|---|---:|---:|---:|---:|",
     ]
-    for key in ["no", "old", "new", "phase"]:
+    for key in MAIN_RUNS:
         row = by_run[key]
         lines.append(
             "| {label} | {step_idx} | {switch_time} | {raw_mean} | {count} |".format(
@@ -453,7 +527,7 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
         "| Profile | Total Duration (ms) | Delta vs No (ms) | Ratio vs No | Source |",
         "|---|---:|---:|---:|---|",
     ]
-    for key in ["no", "old", "new", "phase"]:
+    for key in MAIN_RUNS:
         row = by_run[key]
         lines.append(
             "| {label} | {duration} | {delta} | {ratio} | {source} |".format(
@@ -472,7 +546,7 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
         "| Profile | Peak Reserved (MB) | Delta vs No (MB) | Ratio vs No | Source |",
         "|---|---:|---:|---:|---|",
     ]
-    for key in ["no", "old", "new", "phase"]:
+    for key in MAIN_RUNS:
         row = by_run[key]
         lines.append(
             "| {label} | {mem} | {delta} | {ratio} | {source} |".format(
@@ -491,7 +565,7 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
         "| Profile | Peak Allocated (MB) | Delta vs No (MB) | Ratio vs No | Source |",
         "|---|---:|---:|---:|---|",
     ]
-    for key in ["no", "old", "new", "phase"]:
+    for key in MAIN_RUNS:
         row = by_run[key]
         lines.append(
             "| {label} | {mem} | {delta} | {ratio} | {source} |".format(
@@ -502,6 +576,27 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
                 source=row["peak_allocated_source"],
             )
         )
+
+    if warmup_row is not None:
+        lines += [
+            "",
+            "## Warmup Full-Resident Memory",
+            "",
+            "| Profile | Peak Reserved (MB) | Delta vs No (MB) | Peak Allocated (MB) | Delta vs No (MB) | Source |",
+            "|---|---:|---:|---:|---:|---|",
+            "| {label} | {peak_reserved} | {reserved_delta} | {peak_allocated} | {allocated_delta} | {source} |".format(
+                label=warmup_row["label"],
+                peak_reserved=fmt(warmup_row["peak_reserved_mb"], 0),
+                reserved_delta=fmt(
+                    delta(base_peak_reserved, warmup_row["peak_reserved_mb"]), 0
+                ),
+                peak_allocated=fmt(warmup_row["peak_allocated_mb"], 0),
+                allocated_delta=fmt(
+                    delta(base_peak_allocated, warmup_row["peak_allocated_mb"]), 0
+                ),
+                source=warmup_row["peak_reserved_source"],
+            ),
+        ]
 
     path.write_text("\n".join(lines) + "\n")
 

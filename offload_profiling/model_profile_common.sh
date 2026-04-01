@@ -110,7 +110,7 @@ apply_profile_model_defaults() {
             GUIDANCE_SCALE_2="${GUIDANCE_SCALE_2:-3.0}"
             ;;
         hunyuanvideo)
-            NUM_FRAMES="${NUM_FRAMES:-125}"
+            NUM_FRAMES="${NUM_FRAMES:-81}"
             HEIGHT="${HEIGHT:-720}"
             WIDTH="${WIDTH:-1280}"
             NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-10}"
