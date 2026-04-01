@@ -19,6 +19,7 @@ if [[ -f "$REPO_ROOT/.venv/bin/activate" ]]; then
 fi
 
 cd "$REPO_ROOT"
+source "$SCRIPT_DIR/model_profile_common.sh"
 
 if ! command -v sglang >/dev/null 2>&1; then
     echo "ERROR: sglang not found in PATH (activate env first)."
@@ -38,20 +39,9 @@ echo ""
 python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU count: {torch.cuda.device_count()}')"
 echo ""
 
-MODEL_PATH="${MODEL_PATH:-/scratch/user/u.hm347392/sglang/Wan2.2-TI2V-5B-Diffusers}"
-PROMPT="${PROMPT:-A cat walks on the grass, realistic}"
-NUM_FRAMES="${NUM_FRAMES:-81}"
-HEIGHT="${HEIGHT:-704}"
-WIDTH="${WIDTH:-1280}"
-NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-9}"
-GUIDANCE_SCALE="${GUIDANCE_SCALE:-3.5}"
-GUIDANCE_SCALE_2="${GUIDANCE_SCALE_2:-4.0}"
-NUM_GPUS="${NUM_GPUS:-2}"
-ULYSSES_DEGREE="${ULYSSES_DEGREE:-2}"
-ATTENTION_BACKEND="${ATTENTION_BACKEND:-sage_attn}"
-NSYS_OUTPUT_PREFIX="${NSYS_OUTPUT_PREFIX:-$PROFILES_DIR/old_offload_nsys}"
-VIDEO_OUT="${VIDEO_OUT:-$RESULTS_DIR/nsys_old_offload_profiled.mp4}"
-PERF_OUT="${PERF_OUT:-$PROFILES_DIR/perf_old_offload_profiled.json}"
+resolve_profile_model old "${1:-}"
+apply_profile_model_defaults
+apply_profile_output_layout
 
 # Common generation flags
 COMMON_FLAGS=(
@@ -69,8 +59,11 @@ COMMON_FLAGS=(
     --width "$WIDTH"
     --num-inference-steps "$NUM_INFERENCE_STEPS"
     --guidance-scale "$GUIDANCE_SCALE"
-    --guidance-scale-2 "$GUIDANCE_SCALE_2"
 )
+
+if [[ -n "${GUIDANCE_SCALE_2:-}" ]]; then
+    COMMON_FLAGS+=(--guidance-scale-2 "$GUIDANCE_SCALE_2")
+fi
 
 # if [[ "${SGLANG_ENABLE_TORCH_COMPILE:-0}" == "1" ]]; then
     COMMON_FLAGS+=(--enable-torch-compile)
@@ -98,6 +91,7 @@ echo "=========================================="
 echo "RUN: Profiled run (nsys)"
 echo "=========================================="
 echo "Start: $(date)"
+echo "Profile model: ${PROFILE_MODEL}"
 echo "Mock PCIe config: enabled=${SGLANG_WAN_MOCK_COMM_ENABLE}, pcie_mb=${SGLANG_WAN_MOCK_COMM_PCIE_MB}, every_n_blocks=${SGLANG_WAN_MOCK_COMM_EVERY_N_BLOCKS}, comm_aware=0"
 
 time nsys profile \
@@ -119,7 +113,7 @@ echo "=========================================="
 echo "Timestamp: $(date)"
 echo ""
 echo "Outputs:"
-echo "  - Video: ${VIDEO_OUT}"
+echo "  - Artifact: ${VIDEO_OUT}"
 echo "  - nsys profile: ${NSYS_OUTPUT_PREFIX}.nsys-rep"
 echo "  - Perf JSON: ${PERF_OUT}"
 echo ""

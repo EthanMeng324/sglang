@@ -85,7 +85,15 @@ def find_perf_json(run: str, trace_path: Path) -> Path | None:
     }
     profiles_dir = trace_path.parent
     results_dir = profiles_dir.parent
+    trace_stem = trace_path.name.replace(".nsys-rep", "")
+    derived_names = []
+    if trace_stem.endswith("_nsys"):
+        derived_names.append(f"perf_{trace_stem[:-5]}_profiled.json")
     for root in (profiles_dir, results_dir):
+        for name in derived_names:
+            path = root / name
+            if path.exists():
+                return path
         for name in exact_names[run]:
             path = root / name
             if path.exists():

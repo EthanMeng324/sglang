@@ -4,12 +4,53 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULTS_DIR="${RESULTS_DIR:-$SCRIPT_DIR/results}"
 PROFILES_DIR="${PROFILES_DIR:-$RESULTS_DIR/profiles}"
-ANALYSIS_DIR="${ANALYSIS_DIR:-$PROFILES_DIR/analysis}"
+PROFILE_MODEL="${1:-${PROFILE_MODEL:-wanvideo}}"
+PROFILE_MODEL="$(printf '%s' "$PROFILE_MODEL" | tr '[:upper:]' '[:lower:]')"
 
-NEW_NSYS="${NEW_NSYS:-$PROFILES_DIR/new_offload_nsys.nsys-rep}"
-OLD_NSYS="${OLD_NSYS:-$PROFILES_DIR/old_offload_nsys.nsys-rep}"
-NO_NSYS="${NO_NSYS:-$PROFILES_DIR/no_offload_nsys.nsys-rep}"
-PHASE_NSYS="${PHASE_NSYS:-$PROFILES_DIR/phase_offload_nsys.nsys-rep}"
+resolve_trace_path() {
+    local preferred="$1"
+    local fallback="$2"
+    if [[ -f "$preferred" ]]; then
+        printf '%s' "$preferred"
+    else
+        printf '%s' "$fallback"
+    fi
+}
+
+case "$PROFILE_MODEL" in
+    wan|wanvideo)
+        PROFILE_MODEL="wanvideo"
+        MODEL_PROFILES_DIR="${PROFILES_DIR%/}/wanvideo"
+        ANALYSIS_DIR="${ANALYSIS_DIR:-$MODEL_PROFILES_DIR/analysis}"
+        NEW_NSYS="${NEW_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/new_offload_nsys.nsys-rep" "$PROFILES_DIR/new_offload_nsys.nsys-rep")}"
+        OLD_NSYS="${OLD_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/old_offload_nsys.nsys-rep" "$PROFILES_DIR/old_offload_nsys.nsys-rep")}"
+        NO_NSYS="${NO_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/no_offload_nsys.nsys-rep" "$PROFILES_DIR/no_offload_nsys.nsys-rep")}"
+        PHASE_NSYS="${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/phase_offload_nsys.nsys-rep" "$PROFILES_DIR/phase_offload_nsys.nsys-rep")}"
+        ;;
+    flux|flux1|flux2|fluximage|flux_image)
+        PROFILE_MODEL="flux"
+        MODEL_PROFILES_DIR="${PROFILES_DIR%/}/flux"
+        ANALYSIS_DIR="${ANALYSIS_DIR:-$MODEL_PROFILES_DIR/analysis}"
+        NEW_NSYS="${NEW_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_new_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_new_offload_nsys.nsys-rep")}"
+        OLD_NSYS="${OLD_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_old_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_old_offload_nsys.nsys-rep")}"
+        NO_NSYS="${NO_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_no_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_no_offload_nsys.nsys-rep")}"
+        PHASE_NSYS="${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_phase_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_phase_offload_nsys.nsys-rep")}"
+        ;;
+    hunyuan|hunyuanvideo)
+        PROFILE_MODEL="hunyuanvideo"
+        MODEL_PROFILES_DIR="${PROFILES_DIR%/}/hunyuanvideo"
+        ANALYSIS_DIR="${ANALYSIS_DIR:-$MODEL_PROFILES_DIR/analysis}"
+        NEW_NSYS="${NEW_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/hunyuanvideo_new_offload_nsys.nsys-rep" "$PROFILES_DIR/hunyuanvideo_new_offload_nsys.nsys-rep")}"
+        OLD_NSYS="${OLD_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/hunyuanvideo_old_offload_nsys.nsys-rep" "$PROFILES_DIR/hunyuanvideo_old_offload_nsys.nsys-rep")}"
+        NO_NSYS="${NO_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/hunyuanvideo_no_offload_nsys.nsys-rep" "$PROFILES_DIR/hunyuanvideo_no_offload_nsys.nsys-rep")}"
+        PHASE_NSYS="${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/hunyuanvideo_phase_offload_nsys.nsys-rep" "$PROFILES_DIR/hunyuanvideo_phase_offload_nsys.nsys-rep")}"
+        ;;
+    *)
+        echo "ERROR: unsupported PROFILE_MODEL='$PROFILE_MODEL'. Supported: wanvideo, flux, hunyuanvideo."
+        exit 1
+        ;;
+esac
+
 
 mkdir -p "$ANALYSIS_DIR"
 rm -f "$ANALYSIS_DIR"/analysis_summary.md "$ANALYSIS_DIR"/profile_matrix.csv
@@ -42,6 +83,7 @@ fi
 echo "=========================================="
 echo "NSYS PROFILE MATRIX"
 echo "=========================================="
+echo "model: $PROFILE_MODEL"
 echo "new  : $NEW_NSYS"
 echo "old  : $OLD_NSYS"
 echo "no   : $NO_NSYS"

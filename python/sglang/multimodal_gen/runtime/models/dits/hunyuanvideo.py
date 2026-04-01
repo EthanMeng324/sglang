@@ -43,6 +43,14 @@ from sglang.multimodal_gen.runtime.platforms import (
 from sglang.multimodal_gen.runtime.utils.layerwise_offload import OffloadableDiTMixin
 
 
+@torch.compiler.disable
+def _set_forward_context_comm_state(forward_context, tracker, quiesce_fn) -> None:
+    if getattr(forward_context, "comm_activity_tracker", None) is not tracker:
+        forward_context.comm_activity_tracker = tracker
+    if getattr(forward_context, "comm_quiesce_fn", None) is not quiesce_fn:
+        forward_context.comm_quiesce_fn = quiesce_fn
+
+
 class MMDoubleStreamBlock(nn.Module):
     """
     A multimodal DiT block with separate modulation for text and image/video,
@@ -550,6 +558,9 @@ class HunyuanVideoTransformer3DModel(CachableDiT, OffloadableDiTMixin):
             Tuple of (output)
         """
         forward_context = get_forward_context()
+        tracker = getattr(self, "comm_activity_tracker", None)
+        quiesce_fn = getattr(self, "quiesce_prefetch_for_comm", None)
+        _set_forward_context_comm_state(forward_context, tracker, quiesce_fn)
         forward_batch = forward_context.forward_batch
         enable_teacache = forward_batch is not None and forward_batch.enable_teacache
 

@@ -22,6 +22,11 @@ from sglang.multimodal_gen.runtime.layers.attention.backends.attention_backend i
 )
 from sglang.multimodal_gen.runtime.layers.attention.selector import get_attn_backend
 from sglang.multimodal_gen.runtime.layers.usp import (
+    _get_comm_activity_tracker,
+    _get_comm_quiesce_fn,
+    _mark_comm_end,
+    _mark_comm_start,
+    _quiesce_prefetch_for_comm,
     _usp_input_all_to_all,
     _usp_output_all_to_all,
     ring_attn,
@@ -32,6 +37,36 @@ from sglang.multimodal_gen.runtime.managers.forward_context import (
 )
 from sglang.multimodal_gen.runtime.platforms import AttentionBackendEnum
 from sglang.multimodal_gen.utils import get_compute_dtype
+
+
+@torch.compiler.disable
+def _comm_aware_sequence_all_to_all_4d(
+    x: torch.Tensor, scatter_dim: int, gather_dim: int, tag: str
+) -> torch.Tensor:
+    tracker = _get_comm_activity_tracker()
+    quiesce_fn = _get_comm_quiesce_fn()
+    _mark_comm_start(tracker, tag)
+    try:
+        _quiesce_prefetch_for_comm(quiesce_fn)
+        return sequence_model_parallel_all_to_all_4D(
+            x, scatter_dim=scatter_dim, gather_dim=gather_dim
+        )
+    finally:
+        _mark_comm_end(tracker, tag)
+
+
+@torch.compiler.disable
+def _comm_aware_sequence_all_gather(
+    x: torch.Tensor, dim: int, tag: str
+) -> torch.Tensor:
+    tracker = _get_comm_activity_tracker()
+    quiesce_fn = _get_comm_quiesce_fn()
+    _mark_comm_start(tracker, tag)
+    try:
+        _quiesce_prefetch_for_comm(quiesce_fn)
+        return sequence_model_parallel_all_gather(x, dim=dim)
+    finally:
+        _mark_comm_end(tracker, tag)
 
 
 class UlyssesAttention(nn.Module):
@@ -115,7 +150,12 @@ class UlyssesAttention(nn.Module):
         qkv = torch.cat([q, k, v], dim=0)  # [3, seq_len, num_heads, head_dim]
 
         # Redistribute heads across sequence dimension
-        qkv = sequence_model_parallel_all_to_all_4D(qkv, scatter_dim=2, gather_dim=1)
+        qkv = _comm_aware_sequence_all_to_all_4d(
+            qkv,
+            scatter_dim=2,
+            gather_dim=1,
+            tag="ulysses_qkv_all_to_all",
+        )
         # Apply backend-specific preprocess_qkv
         qkv = self.attn_impl.preprocess_qkv(qkv, ctx_attn_metadata)
 
@@ -141,14 +181,19 @@ class UlyssesAttention(nn.Module):
             replicated_output = output[:, seq_len * world_size :]
             output = output[:, : seq_len * world_size]
             # TODO: make this asynchronous
-            replicated_output = sequence_model_parallel_all_gather(
-                replicated_output.contiguous(), dim=2
+            replicated_output = _comm_aware_sequence_all_gather(
+                replicated_output.contiguous(),
+                dim=2,
+                tag="ulysses_replicated_all_gather",
             )
         # Apply backend-specific postprocess_output
         output = self.attn_impl.postprocess_output(output, ctx_attn_metadata)
 
-        output = sequence_model_parallel_all_to_all_4D(
-            output, scatter_dim=1, gather_dim=2
+        output = _comm_aware_sequence_all_to_all_4d(
+            output,
+            scatter_dim=1,
+            gather_dim=2,
+            tag="ulysses_output_all_to_all",
         )
         return output, replicated_output
 
@@ -198,7 +243,12 @@ class UlyssesAttention_VSA(UlyssesAttention):
         )  # [3, seq_len, num_heads, head_dim]
 
         # Redistribute heads across sequence dimension
-        qkvg = sequence_model_parallel_all_to_all_4D(qkvg, scatter_dim=2, gather_dim=1)
+        qkvg = _comm_aware_sequence_all_to_all_4d(
+            qkvg,
+            scatter_dim=2,
+            gather_dim=1,
+            tag="ulysses_vsa_qkvg_all_to_all",
+        )
 
         qkvg = self.attn_impl.preprocess_qkv(qkvg, ctx_attn_metadata)
 
@@ -210,8 +260,11 @@ class UlyssesAttention_VSA(UlyssesAttention):
         # Apply backend-specific postprocess_output
         output = self.attn_impl.postprocess_output(output, ctx_attn_metadata)
 
-        output = sequence_model_parallel_all_to_all_4D(
-            output, scatter_dim=1, gather_dim=2
+        output = _comm_aware_sequence_all_to_all_4d(
+            output,
+            scatter_dim=1,
+            gather_dim=2,
+            tag="ulysses_vsa_output_all_to_all",
         )
 
         return output

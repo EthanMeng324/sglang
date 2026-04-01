@@ -51,6 +51,7 @@ from sglang.multimodal_gen.runtime.layers.visual_embedding import (
     CombinedTimestepGuidanceTextProjEmbeddings,
     CombinedTimestepTextProjEmbeddings,
 )
+from sglang.multimodal_gen.runtime.managers.forward_context import get_forward_context
 from sglang.multimodal_gen.runtime.models.dits.base import CachableDiT
 from sglang.multimodal_gen.runtime.platforms import current_platform
 from sglang.multimodal_gen.runtime.utils.layerwise_offload import OffloadableDiTMixin
@@ -79,6 +80,14 @@ except Exception:
     _svdq_gemm_w4a4 = None
     _svdq_quantize_w4a4 = None
     _nunchaku_fused_ops_available = False
+
+
+@torch.compiler.disable
+def _set_forward_context_comm_state(forward_context, tracker, quiesce_fn) -> None:
+    if getattr(forward_context, "comm_activity_tracker", None) is not tracker:
+        forward_context.comm_activity_tracker = tracker
+    if getattr(forward_context, "comm_quiesce_fn", None) is not quiesce_fn:
+        forward_context.comm_quiesce_fn = quiesce_fn
 
 
 def _fused_gelu_mlp(
@@ -848,6 +857,11 @@ class FluxTransformer2DModel(CachableDiT, OffloadableDiTMixin):
                 [diffusers.models.attention_processor](https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/attention_processor.py).
 
         """
+        forward_context = get_forward_context()
+        tracker = getattr(self, "comm_activity_tracker", None)
+        quiesce_fn = getattr(self, "quiesce_prefetch_for_comm", None)
+        _set_forward_context_comm_state(forward_context, tracker, quiesce_fn)
+
         if (
             joint_attention_kwargs is not None
             and joint_attention_kwargs.get("scale", None) is not None
