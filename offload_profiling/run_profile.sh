@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/model_profile_common.sh"
 
 usage() {
     cat <<'EOF'
@@ -15,7 +16,7 @@ Supported models:
   flux
 
 Notes:
-  - A no-offload dry run with 1 denoising step is executed first for warmup
+  - A full-resident no-offload dry run is executed first for warmup
   - This wrapper runs: no -> old -> new -> phase -> analyze
   - Extra settings can still be passed through env vars, e.g. HEIGHT/WIDTH/NUM_GPUS
 EOF
@@ -60,6 +61,10 @@ if [[ -n "${NUM_FRAMES_OVERRIDE:-}" ]]; then
     export NUM_FRAMES="$NUM_FRAMES_OVERRIDE"
 fi
 
+resolve_profile_model no "$PROFILE_MODEL" >/dev/null
+apply_profile_model_defaults
+WARMUP_NUM_INFERENCE_STEPS="${WARMUP_NUM_INFERENCE_STEPS:-$NUM_INFERENCE_STEPS}"
+
 echo "=========================================="
 echo "RUN PROFILE MATRIX"
 echo "=========================================="
@@ -91,7 +96,8 @@ run_step_with_env() {
 
 run_step_with_env "Warmup Dry Run" "run_access_no.sh" \
     DRY_RUN=1 \
-    NUM_INFERENCE_STEPS=1
+    DIT_CPU_OFFLOAD_OVERRIDE=false \
+    NUM_INFERENCE_STEPS="$WARMUP_NUM_INFERENCE_STEPS"
 run_step "No Offload" "run_access_no.sh"
 run_step "Old Offload" "run_access_old.sh"
 run_step "Comm-Aware Offload" "run_access.sh"

@@ -8,6 +8,7 @@ import csv
 import json
 import os
 import sqlite3
+import statistics
 import subprocess
 import sys
 from pathlib import Path
@@ -84,6 +85,8 @@ def find_perf_json(run: str, trace_path: Path) -> Path | None:
         "phase": ["perf_phase_offload_profiled.json", "perf_phase_offload.json"],
     }
     profiles_dir = trace_path.parent
+    if trace_path.suffix == ".sqlite" and profiles_dir.name == "sqlite_cache":
+        profiles_dir = profiles_dir.parent.parent
     results_dir = profiles_dir.parent
     trace_stem = trace_path.name.replace(".nsys-rep", "")
     derived_names = []
@@ -182,7 +185,7 @@ def ensure_sqlite(input_path: Path, export_dir: Path, force_export: bool) -> Pat
     return export_sqlite(input_path, export_path)
 
 
-def get_step_time_from_trace(sqlite_path: Path) -> float | None:
+def get_step_durations_from_trace(sqlite_path: Path) -> dict[int, float]:
     conn = sqlite3.connect(sqlite_path)
     rows = conn.execute(
         """
@@ -201,15 +204,54 @@ def get_step_time_from_trace(sqlite_path: Path) -> float | None:
         except ValueError:
             continue
         by_step.setdefault(step, []).append((start, end))
-    steady = []
+    durations: dict[int, float] = {}
     for step, intervals in sorted(by_step.items()):
-        if step < 1:
-            continue
         dur_s = sum((end - start) / 1e9 for start, end in intervals) / len(intervals)
-        steady.append(dur_s)
-    if not steady:
+        durations[step] = dur_s
+    return durations
+
+
+def detect_switch_step(step_durations: dict[int, float]) -> tuple[int, float] | None:
+    steady = sorted((step, dur) for step, dur in step_durations.items() if step >= 1)
+    if len(steady) < 4:
         return None
-    return sum(steady) / len(steady)
+    values = [dur for _, dur in steady]
+    median = statistics.median(values)
+    if median <= 0:
+        return None
+    step_idx, max_value = max(steady, key=lambda item: item[1])
+    if max_value >= median * 1.15:
+        return step_idx, max_value
+    return None
+
+
+def summarize_step_trace(sqlite_path: Path) -> dict[str, float | int | None]:
+    step_durations = get_step_durations_from_trace(sqlite_path)
+    steady = sorted((step, dur) for step, dur in step_durations.items() if step >= 1)
+    if not steady:
+        return {
+            "step_time_s": None,
+            "step_time_raw_s": None,
+            "switch_step_idx": None,
+            "switch_step_time_s": None,
+            "steady_step_count": 0,
+        }
+    raw_mean = sum(dur for _, dur in steady) / len(steady)
+    switch = detect_switch_step(step_durations)
+    filtered = steady
+    if switch is not None:
+        switch_idx, _ = switch
+        filtered = [(step, dur) for step, dur in steady if step != switch_idx]
+    if not filtered:
+        return None
+    adjusted_mean = sum(dur for _, dur in filtered) / len(filtered)
+    return {
+        "step_time_s": adjusted_mean,
+        "step_time_raw_s": raw_mean,
+        "switch_step_idx": switch[0] if switch is not None else None,
+        "switch_step_time_s": switch[1] if switch is not None else None,
+        "steady_step_count": len(filtered),
+    }
 
 
 def fmt(value: float | None, digits: int = 2) -> str:
@@ -251,11 +293,28 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
         step_source = "env_override" if step_override is not None else None
         trace_status = "not_checked"
         sqlite_path = None
+        step_time_raw_s = None
+        switch_step_idx = None
+        switch_step_time_s = None
+        steady_step_count = None
         if step_time_s is None:
             try:
                 sqlite_path = ensure_sqlite(path, export_dir, args.force_export)
-                step_time_s = get_step_time_from_trace(sqlite_path)
-                step_source = f"trace:{sqlite_path.name}" if step_time_s is not None else "trace_missing_step"
+                step_summary = summarize_step_trace(sqlite_path)
+                step_time_s = step_summary["step_time_s"]
+                step_time_raw_s = step_summary["step_time_raw_s"]
+                switch_step_idx = step_summary["switch_step_idx"]
+                switch_step_time_s = step_summary["switch_step_time_s"]
+                steady_step_count = step_summary["steady_step_count"]
+                if step_time_s is not None:
+                    if switch_step_idx is None:
+                        step_source = f"trace:{sqlite_path.name}"
+                    else:
+                        step_source = (
+                            f"trace:{sqlite_path.name}; exclude_step={switch_step_idx}"
+                        )
+                else:
+                    step_source = "trace_missing_step"
                 trace_status = "ok"
             except Exception as exc:
                 trace_status = f"unreadable: {exc}"
@@ -294,7 +353,11 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
                 "path": str(path),
                 "trace_status": trace_status,
                 "step_time_s": step_time_s,
+                "step_time_raw_s": step_time_raw_s,
                 "step_source": step_source or "unavailable",
+                "switch_step_idx": switch_step_idx,
+                "switch_step_time_s": switch_step_time_s,
+                "steady_step_count": steady_step_count,
                 "total_duration_ms": perf_total_duration_ms,
                 "total_duration_source": total_duration_source,
                 "peak_reserved_mb": peak_reserved_mb,
@@ -317,7 +380,11 @@ def write_csv(rows: list[dict[str, object]], path: Path) -> None:
                 "path",
                 "trace_status",
                 "step_time_s",
+                "step_time_raw_s",
                 "step_source",
+                "switch_step_idx",
+                "switch_step_time_s",
+                "steady_step_count",
                 "total_duration_ms",
                 "total_duration_source",
                 "peak_reserved_mb",
@@ -355,6 +422,27 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
                 delta=fmt(delta(base_step, row["step_time_s"]), 3),
                 ratio=fmt(ratio(base_step, row["step_time_s"]), 2),
                 source=row["step_source"],
+            )
+        )
+
+    lines += [
+        "",
+        "Step Time above excludes `step 0` and, when detected, one switch-step outlier.",
+        "",
+        "## Switch Step Outlier",
+        "",
+        "| Profile | Switch Step | Step Time (s) | Raw Mean incl. Switch (s) | Used Steps |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for key in ["no", "old", "new", "phase"]:
+        row = by_run[key]
+        lines.append(
+            "| {label} | {step_idx} | {switch_time} | {raw_mean} | {count} |".format(
+                label=row["label"],
+                step_idx=row["switch_step_idx"] if row["switch_step_idx"] is not None else "N/A",
+                switch_time=fmt(row["switch_step_time_s"], 3),
+                raw_mean=fmt(row["step_time_raw_s"], 3),
+                count=fmt(row["steady_step_count"], 0),
             )
         )
 

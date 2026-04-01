@@ -65,6 +65,10 @@ if [[ -n "${GUIDANCE_SCALE_2:-}" ]]; then
     COMMON_FLAGS+=(--guidance-scale-2 "$GUIDANCE_SCALE_2")
 fi
 
+if [[ -n "${DIT_CPU_OFFLOAD_OVERRIDE:-}" ]]; then
+    COMMON_FLAGS+=(--dit-cpu-offload "$DIT_CPU_OFFLOAD_OVERRIDE")
+fi
+
 # if [[ "${SGLANG_ENABLE_TORCH_COMPILE:-0}" == "1" ]]; then
     COMMON_FLAGS+=(--enable-torch-compile)
 # fi
@@ -89,6 +93,7 @@ export SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES="${SGLANG_DIFFUSION_LOG_DENOISI
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
     WARMUP_OUT="${WARMUP_OUT:-${MODEL_RESULTS_DIR:-$RESULTS_DIR}/warmup_${PROFILE_MODEL}.$([[ "$PROFILE_MODEL" == "flux" ]] && printf '%s' png || printf '%s' mp4)}"
+    WARMUP_PERF_OUT="${WARMUP_PERF_OUT:-${MODEL_PROFILES_DIR:-$PROFILES_DIR}/perf_${PROFILE_MODEL}_warmup_no_offload_profiled.json}"
 
     echo "=========================================="
     echo "RUN: Warmup dry run (no offload)"
@@ -98,12 +103,14 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
     echo "Output: ${WARMUP_OUT}"
 
     time sglang generate "${COMMON_FLAGS[@]}" \
+        --perf-dump-path "$WARMUP_PERF_OUT" \
         --output-path "$WARMUP_OUT"
 
     echo "End: $(date)"
     echo ""
     echo "Warmup complete."
     echo "  - Artifact: ${WARMUP_OUT}"
+    echo "  - Perf JSON: ${WARMUP_PERF_OUT}"
     exit 0
 fi
 
