@@ -97,7 +97,7 @@ apply_profile_model_defaults() {
             NUM_FRAMES="${NUM_FRAMES:-1}"
             HEIGHT="${HEIGHT:-1024}"
             WIDTH="${WIDTH:-1024}"
-            NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-50}"
+            NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-10}"
             GUIDANCE_SCALE="${GUIDANCE_SCALE:-1.0}"
             GUIDANCE_SCALE_2="${GUIDANCE_SCALE_2:-}"
             ;;
@@ -105,7 +105,7 @@ apply_profile_model_defaults() {
             NUM_FRAMES="${NUM_FRAMES:-81}"
             HEIGHT="${HEIGHT:-720}"
             WIDTH="${WIDTH:-1280}"
-            NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-40}"
+            NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-10}"
             GUIDANCE_SCALE="${GUIDANCE_SCALE:-4.0}"
             GUIDANCE_SCALE_2="${GUIDANCE_SCALE_2:-3.0}"
             ;;
@@ -113,7 +113,7 @@ apply_profile_model_defaults() {
             NUM_FRAMES="${NUM_FRAMES:-125}"
             HEIGHT="${HEIGHT:-720}"
             WIDTH="${WIDTH:-1280}"
-            NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-50}"
+            NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-10}"
             GUIDANCE_SCALE="${GUIDANCE_SCALE:-1.0}"
             GUIDANCE_SCALE_2="${GUIDANCE_SCALE_2:-}"
             ;;
