@@ -65,6 +65,10 @@ resolve_profile_model no "$PROFILE_MODEL" >/dev/null
 apply_profile_model_defaults
 WARMUP_NUM_INFERENCE_STEPS="${WARMUP_NUM_INFERENCE_STEPS:-$NUM_INFERENCE_STEPS}"
 
+if [[ "$PROFILE_MODEL" == "flux" ]]; then
+    export DIT_CPU_OFFLOAD_OVERRIDE=false
+fi
+
 echo "=========================================="
 echo "RUN PROFILE MATRIX"
 echo "=========================================="
@@ -96,17 +100,12 @@ run_step_with_env() {
 
 run_step_with_env "Warmup Dry Run" "run_access_no.sh" \
     DRY_RUN=1 \
-    DIT_CPU_OFFLOAD_OVERRIDE=false \
     NUM_INFERENCE_STEPS="$WARMUP_NUM_INFERENCE_STEPS"
 if [[ "$PROFILE_MODEL" == "flux" ]]; then
-    run_step_with_env "No Offload" "run_access_no.sh" \
-        DIT_CPU_OFFLOAD_OVERRIDE=false
-    run_step_with_env "Old Offload" "run_access_old.sh" \
-        DIT_CPU_OFFLOAD_OVERRIDE=false
-    run_step_with_env "Comm-Aware Offload" "run_access.sh" \
-        DIT_CPU_OFFLOAD_OVERRIDE=false
-    run_step_with_env "Phase-Aware Offload" "run_access_phase.sh" \
-        DIT_CPU_OFFLOAD_OVERRIDE=false
+    run_step "No Offload" "run_access_no.sh"
+    run_step "Old Offload" "run_access_old.sh"
+    run_step "Comm-Aware Offload" "run_access.sh"
+    run_step "Phase-Aware Offload" "run_access_phase.sh"
 else
     run_step "No Offload" "run_access_no.sh"
     run_step "Old Offload" "run_access_old.sh"

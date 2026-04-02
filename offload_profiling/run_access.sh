@@ -65,6 +65,10 @@ if [[ -n "${GUIDANCE_SCALE_2:-}" ]]; then
     COMMON_FLAGS+=(--guidance-scale-2 "$GUIDANCE_SCALE_2")
 fi
 
+if [[ -n "${DIT_CPU_OFFLOAD_OVERRIDE:-}" ]]; then
+    COMMON_FLAGS+=(--dit-cpu-offload "$DIT_CPU_OFFLOAD_OVERRIDE")
+fi
+
 ENABLE_TORCH_COMPILE="${ENABLE_TORCH_COMPILE:-}"
 if [[ -z "$ENABLE_TORCH_COMPILE" ]]; then
     if [[ "${DISABLE_TORCH_COMPILE:-0}" == "1" ]]; then
