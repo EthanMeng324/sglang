@@ -64,6 +64,10 @@ fi
 resolve_profile_model no "$PROFILE_MODEL" >/dev/null
 apply_profile_model_defaults
 WARMUP_NUM_INFERENCE_STEPS="${WARMUP_NUM_INFERENCE_STEPS:-$NUM_INFERENCE_STEPS}"
+WARMUP_SERVER_PORT="${WARMUP_SERVER_PORT:-30100}"
+WARMUP_SCHEDULER_PORT="${WARMUP_SCHEDULER_PORT:-5748}"
+WARMUP_MASTER_PORT="${WARMUP_MASTER_PORT:-30170}"
+WARMUP_COOLDOWN_SEC="${WARMUP_COOLDOWN_SEC:-5}"
 
 if [[ "$PROFILE_MODEL" == "flux" ]]; then
     export DIT_CPU_OFFLOAD_OVERRIDE=false
@@ -100,7 +104,11 @@ run_step_with_env() {
 
 run_step_with_env "Warmup Dry Run" "run_access_no.sh" \
     DRY_RUN=1 \
+    SERVER_PORT_OVERRIDE="$WARMUP_SERVER_PORT" \
+    SCHEDULER_PORT_OVERRIDE="$WARMUP_SCHEDULER_PORT" \
+    MASTER_PORT_OVERRIDE="$WARMUP_MASTER_PORT" \
     NUM_INFERENCE_STEPS="$WARMUP_NUM_INFERENCE_STEPS"
+sleep "$WARMUP_COOLDOWN_SEC"
 if [[ "$PROFILE_MODEL" == "flux" ]]; then
     run_step "No Offload" "run_access_no.sh"
     run_step "Old Offload" "run_access_old.sh"

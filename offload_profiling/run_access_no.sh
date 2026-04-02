@@ -61,6 +61,18 @@ COMMON_FLAGS=(
     --guidance-scale "$GUIDANCE_SCALE"
 )
 
+if [[ -n "${MASTER_PORT_OVERRIDE:-}" ]]; then
+    COMMON_FLAGS+=(--master-port "$MASTER_PORT_OVERRIDE")
+fi
+
+if [[ -n "${SERVER_PORT_OVERRIDE:-}" ]]; then
+    COMMON_FLAGS+=(--port "$SERVER_PORT_OVERRIDE")
+fi
+
+if [[ -n "${SCHEDULER_PORT_OVERRIDE:-}" ]]; then
+    COMMON_FLAGS+=(--scheduler-port "$SCHEDULER_PORT_OVERRIDE")
+fi
+
 if [[ -n "${GUIDANCE_SCALE_2:-}" ]]; then
     COMMON_FLAGS+=(--guidance-scale-2 "$GUIDANCE_SCALE_2")
 fi
@@ -118,6 +130,9 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
     echo "Output: ${WARMUP_OUT}"
     echo "DIT_CPU_OFFLOAD_OVERRIDE=${DIT_CPU_OFFLOAD_OVERRIDE_DISPLAY}"
     echo "DIT CPU offload flag: ${DIT_CPU_OFFLOAD_FLAG_DISPLAY}"
+    echo "Server port override: ${SERVER_PORT_OVERRIDE:-<default>}"
+    echo "Scheduler port override: ${SCHEDULER_PORT_OVERRIDE:-<default>}"
+    echo "Master port override: ${MASTER_PORT_OVERRIDE:-<default>}"
 
     time sglang generate "${COMMON_FLAGS[@]}" \
         --perf-dump-path "$WARMUP_PERF_OUT" \
@@ -138,6 +153,9 @@ echo "Start: $(date)"
 echo "Profile model: ${PROFILE_MODEL}"
 echo "DIT_CPU_OFFLOAD_OVERRIDE=${DIT_CPU_OFFLOAD_OVERRIDE_DISPLAY}"
 echo "DIT CPU offload flag: ${DIT_CPU_OFFLOAD_FLAG_DISPLAY}"
+echo "Server port override: ${SERVER_PORT_OVERRIDE:-<default>}"
+echo "Scheduler port override: ${SCHEDULER_PORT_OVERRIDE:-<default>}"
+echo "Master port override: ${MASTER_PORT_OVERRIDE:-<default>}"
 echo "Mock PCIe config: enabled=${SGLANG_WAN_MOCK_COMM_ENABLE}, pcie_mb=${SGLANG_WAN_MOCK_COMM_PCIE_MB}, every_n_blocks=${SGLANG_WAN_MOCK_COMM_EVERY_N_BLOCKS}, comm_aware=0"
 
 time nsys profile \
