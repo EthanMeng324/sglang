@@ -20,14 +20,19 @@ Supported models:
 
 This wrapper:
   1. starts nvidia-smi dmon in the background
+  2. starts a detailed nvidia-smi query sampler for clock-drop/throttle reasons
   2. runs the existing run_profile.sh flow
-  3. stops dmon and stores the CSV under results/profiles/<model>/
+  4. stops telemetry samplers and stores the CSVs under results/profiles/<model>/
+  5. summarizes the detailed telemetry by run stage using timeline markers
 
 Optional env vars:
   DMON_INTERVAL_SEC   Sampling interval for dmon. Default: 1
   DMON_METRICS        dmon metric groups. Default: pucvmt
   DMON_GPU_IDS        Optional GPU ids passed to `nvidia-smi dmon -i`
   DMON_OUTPUT_PATH    Optional explicit output CSV path
+  GPU_QUERY_INTERVAL_SEC  Sampling interval for detailed telemetry. Default: 1
+  GPU_QUERY_OUTPUT_PATH   Optional explicit detailed telemetry CSV path
+  GPU_QUERY_FIELDS        Optional explicit --query-gpu field list
   BATCH_SIZE / NUM_OUTPUTS_PER_PROMPT  Number of outputs per prompt (useful for flux)
 EOF
 }
@@ -92,15 +97,27 @@ DMON_INTERVAL_SEC="${DMON_INTERVAL_SEC:-1}"
 DMON_METRICS="${DMON_METRICS:-pucvmt}"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 DMON_OUTPUT_PATH="${DMON_OUTPUT_PATH:-${MODEL_PROFILES_DIR}/dmon_${PROFILE_MODEL}_${TIMESTAMP}.csv}"
+GPU_QUERY_INTERVAL_SEC="${GPU_QUERY_INTERVAL_SEC:-1}"
+GPU_QUERY_OUTPUT_PATH="${GPU_QUERY_OUTPUT_PATH:-${MODEL_PROFILES_DIR}/telemetry_${PROFILE_MODEL}_${TIMESTAMP}.csv}"
+GPU_QUERY_SUMMARY_MD="${GPU_QUERY_SUMMARY_MD:-${MODEL_PROFILES_DIR}/telemetry_summary_${PROFILE_MODEL}_${TIMESTAMP}.md}"
+GPU_QUERY_SUMMARY_CSV="${GPU_QUERY_SUMMARY_CSV:-${MODEL_PROFILES_DIR}/telemetry_summary_${PROFILE_MODEL}_${TIMESTAMP}.csv}"
+GPU_QUERY_FIELDS="${GPU_QUERY_FIELDS:-timestamp,index,name,pstate,clocks.current.graphics,clocks.max.graphics,temperature.gpu,temperature.memory,power.draw,power.limit,enforced.power.limit,utilization.gpu,utilization.memory,memory.used,clocks_event_reasons.active,clocks_event_reasons.gpu_idle,clocks_event_reasons.applications_clocks_setting,clocks_event_reasons.sw_power_cap,clocks_event_reasons.hw_slowdown,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_power_brake_slowdown,clocks_event_reasons.sw_thermal_slowdown,clocks_event_reasons.sync_boost}"
 TIMELINE_LOG_PATH="${TIMELINE_LOG_PATH:-${MODEL_PROFILES_DIR}/timeline_${PROFILE_MODEL}_${TIMESTAMP}.log}"
 mkdir -p "$(dirname "$DMON_OUTPUT_PATH")"
 
 DMON_PID=""
+GPU_QUERY_PID=""
 cleanup() {
     if [[ -n "${DMON_PID:-}" ]]; then
         if kill -0 "$DMON_PID" >/dev/null 2>&1; then
             kill "$DMON_PID" >/dev/null 2>&1 || true
             wait "$DMON_PID" >/dev/null 2>&1 || true
+        fi
+    fi
+    if [[ -n "${GPU_QUERY_PID:-}" ]]; then
+        if kill -0 "$GPU_QUERY_PID" >/dev/null 2>&1; then
+            kill "$GPU_QUERY_PID" >/dev/null 2>&1 || true
+            wait "$GPU_QUERY_PID" >/dev/null 2>&1 || true
         fi
     fi
 }
@@ -118,6 +135,18 @@ if [[ -n "${DMON_GPU_IDS:-}" ]]; then
     DMON_CMD+=(-i "$DMON_GPU_IDS")
 fi
 
+GPU_QUERY_CMD=(
+    nvidia-smi
+    --query-gpu="$GPU_QUERY_FIELDS"
+    --format=csv,nounits
+    -l "$GPU_QUERY_INTERVAL_SEC"
+    -f "$GPU_QUERY_OUTPUT_PATH"
+)
+
+if [[ -n "${DMON_GPU_IDS:-}" ]]; then
+    GPU_QUERY_CMD+=(-i "$DMON_GPU_IDS")
+fi
+
 echo "=========================================="
 echo "RUN PROFILE MATRIX WITH DMON"
 echo "=========================================="
@@ -125,9 +154,12 @@ echo "Model        : ${PROFILE_MODEL}"
 echo "Num frames   : ${NUM_FRAMES_OVERRIDE:-default}"
 echo "Batch size   : ${BATCH_SIZE_OVERRIDE:-default}"
 echo "DMON output  : ${DMON_OUTPUT_PATH}"
+echo "GPU telemetry: ${GPU_QUERY_OUTPUT_PATH}"
+echo "Summary md   : ${GPU_QUERY_SUMMARY_MD}"
 echo "Timeline log : ${TIMELINE_LOG_PATH}"
 echo "DMON metrics : ${DMON_METRICS}"
 echo "DMON period  : ${DMON_INTERVAL_SEC}s"
+echo "Query period : ${GPU_QUERY_INTERVAL_SEC}s"
 if [[ -n "${DMON_GPU_IDS:-}" ]]; then
     echo "DMON GPUs    : ${DMON_GPU_IDS}"
 fi
@@ -143,7 +175,17 @@ if ! kill -0 "$DMON_PID" >/dev/null 2>&1; then
     exit 1
 fi
 
+"${GPU_QUERY_CMD[@]}" >/dev/null 2>&1 &
+GPU_QUERY_PID="$!"
+sleep 1
+
+if ! kill -0 "$GPU_QUERY_PID" >/dev/null 2>&1; then
+    echo "ERROR: failed to start detailed nvidia-smi telemetry sampler"
+    exit 1
+fi
+
 echo "Started nvidia-smi dmon with PID ${DMON_PID}"
+echo "Started detailed GPU telemetry sampler with PID ${GPU_QUERY_PID}"
 echo ""
 
 mkdir -p "$(dirname "$TIMELINE_LOG_PATH")"
@@ -154,6 +196,12 @@ printf '%s,%s,%s,%s,%s\n' \
     "dmon_start" \
     "$PROFILE_MODEL" \
     "$DMON_OUTPUT_PATH" >>"$TIMELINE_LOG_PATH"
+printf '%s,%s,%s,%s,%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "$(date +%s.%N)" \
+    "telemetry_start" \
+    "$PROFILE_MODEL" \
+    "$GPU_QUERY_OUTPUT_PATH" >>"$TIMELINE_LOG_PATH"
 
 RUN_PROFILE_CMD=(
     bash "$SCRIPT_DIR/run_profile.sh"
@@ -169,6 +217,7 @@ TIMELINE_LOG_PATH="$TIMELINE_LOG_PATH" "${RUN_PROFILE_CMD[@]}"
 
 cleanup
 DMON_PID=""
+GPU_QUERY_PID=""
 
 printf '%s,%s,%s,%s,%s\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -176,6 +225,18 @@ printf '%s,%s,%s,%s,%s\n' \
     "dmon_stop" \
     "$PROFILE_MODEL" \
     "$DMON_OUTPUT_PATH" >>"$TIMELINE_LOG_PATH"
+printf '%s,%s,%s,%s,%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "$(date +%s.%N)" \
+    "telemetry_stop" \
+    "$PROFILE_MODEL" \
+    "$GPU_QUERY_OUTPUT_PATH" >>"$TIMELINE_LOG_PATH"
+
+python "$SCRIPT_DIR/analyze_clock_drop.py" \
+    --timeline "$TIMELINE_LOG_PATH" \
+    --telemetry "$GPU_QUERY_OUTPUT_PATH" \
+    --output-md "$GPU_QUERY_SUMMARY_MD" \
+    --output-csv "$GPU_QUERY_SUMMARY_CSV"
 
 echo ""
 echo "=========================================="
@@ -183,4 +244,6 @@ echo "RUN PROFILE MATRIX WITH DMON COMPLETE"
 echo "=========================================="
 echo "Model       : ${PROFILE_MODEL}"
 echo "DMON output : ${DMON_OUTPUT_PATH}"
+echo "Telemetry   : ${GPU_QUERY_OUTPUT_PATH}"
+echo "Summary md  : ${GPU_QUERY_SUMMARY_MD}"
 echo "End         : $(date)"
