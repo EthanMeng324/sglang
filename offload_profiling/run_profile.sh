@@ -115,10 +115,10 @@ if [[ "$PROFILE_MODEL" == "flux" ]]; then
     run_step "Comm-Aware Offload" "run_access.sh"
     run_step "Phase-Aware Offload" "run_access_phase.sh"
 else
-    run_step "No Offload" "run_access_no.sh"
-    run_step "Old Offload" "run_access_old.sh"
     run_step "Comm-Aware Offload" "run_access.sh"
     run_step "Phase-Aware Offload" "run_access_phase.sh"
+    run_step "No Offload" "run_access_no.sh"
+    run_step "Old Offload" "run_access_old.sh"
 fi
 run_step "Analyze NSYS" "analyze_nsys.sh"
 
