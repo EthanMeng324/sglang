@@ -98,7 +98,12 @@ run_step_with_env "Warmup Dry Run" "run_access_no.sh" \
     DRY_RUN=1 \
     DIT_CPU_OFFLOAD_OVERRIDE=false \
     NUM_INFERENCE_STEPS="$WARMUP_NUM_INFERENCE_STEPS"
-run_step "No Offload" "run_access_no.sh"
+if [[ "$PROFILE_MODEL" == "flux" ]]; then
+    run_step_with_env "No Offload" "run_access_no.sh" \
+        DIT_CPU_OFFLOAD_OVERRIDE=false
+else
+    run_step "No Offload" "run_access_no.sh"
+fi
 run_step "Old Offload" "run_access_old.sh"
 run_step "Comm-Aware Offload" "run_access.sh"
 run_step "Phase-Aware Offload" "run_access_phase.sh"
