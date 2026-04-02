@@ -43,6 +43,10 @@ resolve_profile_model no "${1:-}"
 apply_profile_model_defaults
 apply_profile_output_layout
 
+if [[ "$PROFILE_MODEL" == "flux" ]]; then
+    export SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING="${SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING:-1}"
+fi
+
 # Common generation flags
 COMMON_FLAGS=(
     --model-path "$MODEL_PATH"
@@ -133,6 +137,7 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
     echo "Server port override: ${SERVER_PORT_OVERRIDE:-<default>}"
     echo "Scheduler port override: ${SCHEDULER_PORT_OVERRIDE:-<default>}"
     echo "Master port override: ${MASTER_PORT_OVERRIDE:-<default>}"
+    echo "Force diffusers timestep embedding: ${SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING:-0}"
 
     time sglang generate "${COMMON_FLAGS[@]}" \
         --perf-dump-path "$WARMUP_PERF_OUT" \
@@ -156,6 +161,7 @@ echo "DIT CPU offload flag: ${DIT_CPU_OFFLOAD_FLAG_DISPLAY}"
 echo "Server port override: ${SERVER_PORT_OVERRIDE:-<default>}"
 echo "Scheduler port override: ${SCHEDULER_PORT_OVERRIDE:-<default>}"
 echo "Master port override: ${MASTER_PORT_OVERRIDE:-<default>}"
+echo "Force diffusers timestep embedding: ${SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING:-0}"
 echo "Mock PCIe config: enabled=${SGLANG_WAN_MOCK_COMM_ENABLE}, pcie_mb=${SGLANG_WAN_MOCK_COMM_PCIE_MB}, every_n_blocks=${SGLANG_WAN_MOCK_COMM_EVERY_N_BLOCKS}, comm_aware=0"
 
 time nsys profile \

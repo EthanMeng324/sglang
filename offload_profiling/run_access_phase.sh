@@ -43,6 +43,10 @@ resolve_profile_model phase "${1:-}"
 apply_profile_model_defaults
 apply_profile_output_layout
 
+if [[ "$PROFILE_MODEL" == "flux" ]]; then
+    export SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING="${SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING:-1}"
+fi
+
 # Common generation flags
 COMMON_FLAGS=(
     --model-path "$MODEL_PATH"
@@ -108,6 +112,7 @@ echo "RUN: Profiled run (nsys)"
 echo "=========================================="
 echo "Start: $(date)"
 echo "Profile model: ${PROFILE_MODEL}"
+echo "Force diffusers timestep embedding: ${SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING:-0}"
 echo "Mock PCIe config: enabled=${SGLANG_WAN_MOCK_COMM_ENABLE}, pcie_mb=${SGLANG_WAN_MOCK_COMM_PCIE_MB}, every_n_blocks=${SGLANG_WAN_MOCK_COMM_EVERY_N_BLOCKS}, comm_aware=${SGLANG_DIT_COMM_AWARE_OFFLOAD}"
 
 time nsys profile \

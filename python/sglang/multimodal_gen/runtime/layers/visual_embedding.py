@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import math
+import os
 
 import torch
 import torch.nn as nn
@@ -30,6 +31,12 @@ from sglang.multimodal_gen.runtime.layers.mlp import MLP
 from sglang.multimodal_gen.runtime.platforms import current_platform
 
 _is_cuda = current_platform.is_cuda()
+
+
+def _use_custom_cuda_timestep_embedding() -> bool:
+    if not _is_cuda:
+        return False
+    return os.getenv("SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING", "0") != "1"
 
 
 class PatchEmbed(nn.Module):
@@ -88,7 +95,7 @@ class PatchEmbed(nn.Module):
 
 class Timesteps(_Timesteps):
     def forward(self, timesteps: torch.Tensor) -> torch.Tensor:
-        if _is_cuda:
+        if _use_custom_cuda_timestep_embedding():
             return timestep_embedding_cuda(
                 timesteps,
                 self.num_channels,
