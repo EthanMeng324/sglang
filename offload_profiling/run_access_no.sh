@@ -69,6 +69,12 @@ if [[ -n "${DIT_CPU_OFFLOAD_OVERRIDE:-}" ]]; then
     COMMON_FLAGS+=(--dit-cpu-offload "$DIT_CPU_OFFLOAD_OVERRIDE")
 fi
 
+DIT_CPU_OFFLOAD_OVERRIDE_DISPLAY="${DIT_CPU_OFFLOAD_OVERRIDE:-<unset>}"
+DIT_CPU_OFFLOAD_FLAG_DISPLAY="default"
+if [[ -n "${DIT_CPU_OFFLOAD_OVERRIDE:-}" ]]; then
+    DIT_CPU_OFFLOAD_FLAG_DISPLAY="--dit-cpu-offload ${DIT_CPU_OFFLOAD_OVERRIDE}"
+fi
+
 ENABLE_TORCH_COMPILE="${ENABLE_TORCH_COMPILE:-}"
 if [[ -z "$ENABLE_TORCH_COMPILE" ]]; then
     if [[ "${DISABLE_TORCH_COMPILE:-0}" == "1" ]]; then
@@ -110,6 +116,8 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
     echo "Start: $(date)"
     echo "Profile model: ${PROFILE_MODEL}"
     echo "Output: ${WARMUP_OUT}"
+    echo "DIT_CPU_OFFLOAD_OVERRIDE=${DIT_CPU_OFFLOAD_OVERRIDE_DISPLAY}"
+    echo "DIT CPU offload flag: ${DIT_CPU_OFFLOAD_FLAG_DISPLAY}"
 
     time sglang generate "${COMMON_FLAGS[@]}" \
         --perf-dump-path "$WARMUP_PERF_OUT" \
@@ -128,6 +136,8 @@ echo "RUN: Profiled run (nsys)"
 echo "=========================================="
 echo "Start: $(date)"
 echo "Profile model: ${PROFILE_MODEL}"
+echo "DIT_CPU_OFFLOAD_OVERRIDE=${DIT_CPU_OFFLOAD_OVERRIDE_DISPLAY}"
+echo "DIT CPU offload flag: ${DIT_CPU_OFFLOAD_FLAG_DISPLAY}"
 echo "Mock PCIe config: enabled=${SGLANG_WAN_MOCK_COMM_ENABLE}, pcie_mb=${SGLANG_WAN_MOCK_COMM_PCIE_MB}, every_n_blocks=${SGLANG_WAN_MOCK_COMM_EVERY_N_BLOCKS}, comm_aware=0"
 
 time nsys profile \
