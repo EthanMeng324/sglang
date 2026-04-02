@@ -92,6 +92,7 @@ DMON_INTERVAL_SEC="${DMON_INTERVAL_SEC:-1}"
 DMON_METRICS="${DMON_METRICS:-pucvmt}"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 DMON_OUTPUT_PATH="${DMON_OUTPUT_PATH:-${MODEL_PROFILES_DIR}/dmon_${PROFILE_MODEL}_${TIMESTAMP}.csv}"
+TIMELINE_LOG_PATH="${TIMELINE_LOG_PATH:-${MODEL_PROFILES_DIR}/timeline_${PROFILE_MODEL}_${TIMESTAMP}.log}"
 mkdir -p "$(dirname "$DMON_OUTPUT_PATH")"
 
 DMON_PID=""
@@ -124,6 +125,7 @@ echo "Model        : ${PROFILE_MODEL}"
 echo "Num frames   : ${NUM_FRAMES_OVERRIDE:-default}"
 echo "Batch size   : ${BATCH_SIZE_OVERRIDE:-default}"
 echo "DMON output  : ${DMON_OUTPUT_PATH}"
+echo "Timeline log : ${TIMELINE_LOG_PATH}"
 echo "DMON metrics : ${DMON_METRICS}"
 echo "DMON period  : ${DMON_INTERVAL_SEC}s"
 if [[ -n "${DMON_GPU_IDS:-}" ]]; then
@@ -144,6 +146,15 @@ fi
 echo "Started nvidia-smi dmon with PID ${DMON_PID}"
 echo ""
 
+mkdir -p "$(dirname "$TIMELINE_LOG_PATH")"
+printf 'utc_iso,epoch_s,event,label,detail\n' >"$TIMELINE_LOG_PATH"
+printf '%s,%s,%s,%s,%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "$(date +%s.%N)" \
+    "dmon_start" \
+    "$PROFILE_MODEL" \
+    "$DMON_OUTPUT_PATH" >>"$TIMELINE_LOG_PATH"
+
 RUN_PROFILE_CMD=(
     bash "$SCRIPT_DIR/run_profile.sh"
     --model "$PROFILE_MODEL"
@@ -154,10 +165,17 @@ fi
 if [[ -n "${BATCH_SIZE_OVERRIDE:-}" ]]; then
     RUN_PROFILE_CMD+=(--batch-size "$BATCH_SIZE_OVERRIDE")
 fi
-"${RUN_PROFILE_CMD[@]}"
+TIMELINE_LOG_PATH="$TIMELINE_LOG_PATH" "${RUN_PROFILE_CMD[@]}"
 
 cleanup
 DMON_PID=""
+
+printf '%s,%s,%s,%s,%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "$(date +%s.%N)" \
+    "dmon_stop" \
+    "$PROFILE_MODEL" \
+    "$DMON_OUTPUT_PATH" >>"$TIMELINE_LOG_PATH"
 
 echo ""
 echo "=========================================="

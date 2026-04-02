@@ -77,9 +77,32 @@ WARMUP_SERVER_PORT="${WARMUP_SERVER_PORT:-30100}"
 WARMUP_SCHEDULER_PORT="${WARMUP_SCHEDULER_PORT:-5748}"
 WARMUP_MASTER_PORT="${WARMUP_MASTER_PORT:-30170}"
 WARMUP_COOLDOWN_SEC="${WARMUP_COOLDOWN_SEC:-5}"
+TIMELINE_LOG_PATH="${TIMELINE_LOG_PATH:-}"
 
 if [[ "$PROFILE_MODEL" == "flux" ]]; then
     export DIT_CPU_OFFLOAD_OVERRIDE=false
+fi
+
+timeline_log() {
+    if [[ -z "${TIMELINE_LOG_PATH:-}" ]]; then
+        return 0
+    fi
+    local event="$1"
+    local label="${2:-}"
+    local detail="${3:-}"
+    mkdir -p "$(dirname "$TIMELINE_LOG_PATH")"
+    printf '%s,%s,%s,%s,%s\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$(date +%s.%N)" \
+        "$event" \
+        "$label" \
+        "$detail" >>"$TIMELINE_LOG_PATH"
+}
+
+if [[ -n "${TIMELINE_LOG_PATH:-}" ]]; then
+    : >"$TIMELINE_LOG_PATH"
+    printf 'utc_iso,epoch_s,event,label,detail\n' >>"$TIMELINE_LOG_PATH"
+    timeline_log "run_profile_start" "$PROFILE_MODEL" "num_frames=${NUM_FRAMES_OVERRIDE:-default};batch_size=${BATCH_SIZE_OVERRIDE:-default}"
 fi
 
 echo "=========================================="
@@ -97,7 +120,13 @@ run_step() {
     echo "------------------------------------------"
     echo "STEP: ${label}"
     echo "------------------------------------------"
-    bash "$SCRIPT_DIR/$script_name" "$PROFILE_MODEL"
+    timeline_log "step_start" "$label" "$script_name"
+    if bash "$SCRIPT_DIR/$script_name" "$PROFILE_MODEL"; then
+        timeline_log "step_end" "$label" "$script_name"
+    else
+        timeline_log "step_failed" "$label" "$script_name"
+        return 1
+    fi
     echo ""
 }
 
@@ -108,7 +137,13 @@ run_step_with_env() {
     echo "------------------------------------------"
     echo "STEP: ${label}"
     echo "------------------------------------------"
-    env "$@" bash "$SCRIPT_DIR/$script_name" "$PROFILE_MODEL"
+    timeline_log "step_start" "$label" "$script_name"
+    if env "$@" bash "$SCRIPT_DIR/$script_name" "$PROFILE_MODEL"; then
+        timeline_log "step_end" "$label" "$script_name"
+    else
+        timeline_log "step_failed" "$label" "$script_name"
+        return 1
+    fi
     echo ""
 }
 
@@ -118,7 +153,9 @@ run_step_with_env "Warmup Dry Run" "run_access_no.sh" \
     SCHEDULER_PORT_OVERRIDE="$WARMUP_SCHEDULER_PORT" \
     MASTER_PORT_OVERRIDE="$WARMUP_MASTER_PORT" \
     NUM_INFERENCE_STEPS="$WARMUP_NUM_INFERENCE_STEPS"
+timeline_log "cooldown_start" "warmup" "sleep=${WARMUP_COOLDOWN_SEC}"
 sleep "$WARMUP_COOLDOWN_SEC"
+timeline_log "cooldown_end" "warmup" "sleep=${WARMUP_COOLDOWN_SEC}"
 if [[ "$PROFILE_MODEL" == "flux" ]]; then
     run_step "No Offload" "run_access_no.sh"
     run_step "Old Offload" "run_access_old.sh"
@@ -137,3 +174,4 @@ echo "PROFILE MATRIX COMPLETE"
 echo "=========================================="
 echo "Model : ${PROFILE_MODEL}"
 echo "End   : $(date)"
+timeline_log "run_profile_end" "$PROFILE_MODEL" ""
