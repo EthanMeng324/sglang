@@ -4,11 +4,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/model_profile_common.sh"
 
+RESULTS_DIR="${RESULTS_DIR:-$SCRIPT_DIR/results}"
+PROFILES_DIR="${PROFILES_DIR:-$RESULTS_DIR/profiles}"
+
 usage() {
     cat <<'EOF'
 Usage:
   bash offload_profiling/run_profile_dmon.sh <model> [num_frames]
-  bash offload_profiling/run_profile_dmon.sh --model <model> [--num-frames <n>]
+  bash offload_profiling/run_profile_dmon.sh --model <model> [--num-frames <n>] [--batch-size <n>]
 
 Supported models:
   wanvideo
@@ -25,11 +28,13 @@ Optional env vars:
   DMON_METRICS        dmon metric groups. Default: pucvmt
   DMON_GPU_IDS        Optional GPU ids passed to `nvidia-smi dmon -i`
   DMON_OUTPUT_PATH    Optional explicit output CSV path
+  BATCH_SIZE / NUM_OUTPUTS_PER_PROMPT  Number of outputs per prompt (useful for flux)
 EOF
 }
 
 PROFILE_MODEL="${PROFILE_MODEL:-}"
 NUM_FRAMES_OVERRIDE="${NUM_FRAMES:-}"
+BATCH_SIZE_OVERRIDE="${BATCH_SIZE:-${NUM_OUTPUTS_PER_PROMPT:-}}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -39,6 +44,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --num-frames)
             NUM_FRAMES_OVERRIDE="$2"
+            shift 2
+            ;;
+        --batch-size|--num-outputs-per-prompt)
+            BATCH_SIZE_OVERRIDE="$2"
             shift 2
             ;;
         -h|--help)
@@ -65,6 +74,9 @@ export PROFILE_MODEL
 
 if [[ -n "${NUM_FRAMES_OVERRIDE:-}" ]]; then
     export NUM_FRAMES="$NUM_FRAMES_OVERRIDE"
+fi
+if [[ -n "${BATCH_SIZE_OVERRIDE:-}" ]]; then
+    export NUM_OUTPUTS_PER_PROMPT="$BATCH_SIZE_OVERRIDE"
 fi
 
 resolve_profile_model no "$PROFILE_MODEL" >/dev/null
@@ -110,6 +122,7 @@ echo "RUN PROFILE MATRIX WITH DMON"
 echo "=========================================="
 echo "Model        : ${PROFILE_MODEL}"
 echo "Num frames   : ${NUM_FRAMES_OVERRIDE:-default}"
+echo "Batch size   : ${BATCH_SIZE_OVERRIDE:-default}"
 echo "DMON output  : ${DMON_OUTPUT_PATH}"
 echo "DMON metrics : ${DMON_METRICS}"
 echo "DMON period  : ${DMON_INTERVAL_SEC}s"
@@ -131,7 +144,17 @@ fi
 echo "Started nvidia-smi dmon with PID ${DMON_PID}"
 echo ""
 
-bash "$SCRIPT_DIR/run_profile.sh" "$PROFILE_MODEL" ${NUM_FRAMES_OVERRIDE:+"$NUM_FRAMES_OVERRIDE"}
+RUN_PROFILE_CMD=(
+    bash "$SCRIPT_DIR/run_profile.sh"
+    --model "$PROFILE_MODEL"
+)
+if [[ -n "${NUM_FRAMES_OVERRIDE:-}" ]]; then
+    RUN_PROFILE_CMD+=(--num-frames "$NUM_FRAMES_OVERRIDE")
+fi
+if [[ -n "${BATCH_SIZE_OVERRIDE:-}" ]]; then
+    RUN_PROFILE_CMD+=(--batch-size "$BATCH_SIZE_OVERRIDE")
+fi
+"${RUN_PROFILE_CMD[@]}"
 
 cleanup
 DMON_PID=""

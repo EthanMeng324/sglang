@@ -8,7 +8,7 @@ usage() {
     cat <<'EOF'
 Usage:
   bash offload_profiling/run_profile.sh <model> [num_frames]
-  bash offload_profiling/run_profile.sh --model <model> [--num-frames <n>]
+  bash offload_profiling/run_profile.sh --model <model> [--num-frames <n>] [--batch-size <n>]
 
 Supported models:
   wanvideo
@@ -18,12 +18,14 @@ Supported models:
 Notes:
   - A full-resident no-offload dry run is executed first for warmup
   - This wrapper runs: no -> old -> new -> phase -> analyze
+  - For flux, --batch-size maps to --num-outputs-per-prompt and generates multiple images from the same prompt
   - Extra settings can still be passed through env vars, e.g. HEIGHT/WIDTH/NUM_GPUS
 EOF
 }
 
 PROFILE_MODEL="${PROFILE_MODEL:-}"
 NUM_FRAMES_OVERRIDE="${NUM_FRAMES:-}"
+BATCH_SIZE_OVERRIDE="${BATCH_SIZE:-${NUM_OUTPUTS_PER_PROMPT:-}}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -33,6 +35,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --num-frames)
             NUM_FRAMES_OVERRIDE="$2"
+            shift 2
+            ;;
+        --batch-size|--num-outputs-per-prompt)
+            BATCH_SIZE_OVERRIDE="$2"
             shift 2
             ;;
         -h|--help)
@@ -60,6 +66,9 @@ export PROFILE_MODEL
 if [[ -n "${NUM_FRAMES_OVERRIDE:-}" ]]; then
     export NUM_FRAMES="$NUM_FRAMES_OVERRIDE"
 fi
+if [[ -n "${BATCH_SIZE_OVERRIDE:-}" ]]; then
+    export NUM_OUTPUTS_PER_PROMPT="$BATCH_SIZE_OVERRIDE"
+fi
 
 resolve_profile_model no "$PROFILE_MODEL" >/dev/null
 apply_profile_model_defaults
@@ -78,6 +87,7 @@ echo "RUN PROFILE MATRIX"
 echo "=========================================="
 echo "Model      : ${PROFILE_MODEL}"
 echo "Num frames : ${NUM_FRAMES_OVERRIDE:-default}"
+echo "Batch size : ${BATCH_SIZE_OVERRIDE:-default}"
 echo "Start      : $(date)"
 echo ""
 

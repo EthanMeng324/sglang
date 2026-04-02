@@ -58,6 +58,7 @@ COMMON_FLAGS=(
     --ulysses-degree "$ULYSSES_DEGREE"
     --attention-backend "$ATTENTION_BACKEND"
     --prompt "$PROMPT"
+    --num-outputs-per-prompt "$NUM_OUTPUTS_PER_PROMPT"
     --num-frames "$NUM_FRAMES"
     --height "$HEIGHT"
     --width "$WIDTH"
@@ -109,6 +110,8 @@ echo "RUN: Profiled run (nsys)"
 echo "=========================================="
 echo "Start: $(date)"
 echo "Profile model: ${PROFILE_MODEL}"
+echo "Batch size: ${NUM_OUTPUTS_PER_PROMPT}"
+echo "Artifact: $(format_output_display_path "$VIDEO_OUT" "$NUM_OUTPUTS_PER_PROMPT")"
 echo "Force diffusers timestep embedding: ${SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING:-0}"
 echo "Mock PCIe config: enabled=${SGLANG_WAN_MOCK_COMM_ENABLE}, pcie_mb=${SGLANG_WAN_MOCK_COMM_PCIE_MB}, every_n_blocks=${SGLANG_WAN_MOCK_COMM_EVERY_N_BLOCKS}, comm_aware=0"
 
@@ -121,7 +124,8 @@ time nsys profile \
     --output="$NSYS_OUTPUT_PREFIX" \
     sglang generate "${COMMON_FLAGS[@]}" \
     --perf-dump-path "$PERF_OUT" \
-    --output-path "$VIDEO_OUT"
+    --output-path "$OUTPUT_DIR" \
+    --output-file-name "$OUTPUT_FILE_NAME"
 
 echo "End: $(date)"
 
@@ -131,7 +135,7 @@ echo "=========================================="
 echo "Timestamp: $(date)"
 echo ""
 echo "Outputs:"
-echo "  - Artifact: ${VIDEO_OUT}"
+echo "  - Artifact: $(format_output_display_path "$VIDEO_OUT" "$NUM_OUTPUTS_PER_PROMPT")"
 echo "  - nsys profile: ${NSYS_OUTPUT_PREFIX}.nsys-rep"
 echo "  - Perf JSON: ${PERF_OUT}"
 echo ""

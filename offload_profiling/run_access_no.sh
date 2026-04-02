@@ -58,6 +58,7 @@ COMMON_FLAGS=(
     --ulysses-degree "$ULYSSES_DEGREE"
     --attention-backend "$ATTENTION_BACKEND"
     --prompt "$PROMPT"
+    --num-outputs-per-prompt "$NUM_OUTPUTS_PER_PROMPT"
     --num-frames "$NUM_FRAMES"
     --height "$HEIGHT"
     --width "$WIDTH"
@@ -123,7 +124,16 @@ export SGLANG_WAN_MOCK_COMM_MAX_MB="${SGLANG_WAN_MOCK_COMM_MAX_MB:-256}"
 export SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES="${SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES:-0}"
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
-    WARMUP_OUT="${WARMUP_OUT:-${MODEL_RESULTS_DIR:-$RESULTS_DIR}/warmup_${PROFILE_MODEL}.$([[ "$PROFILE_MODEL" == "flux" ]] && printf '%s' png || printf '%s' mp4)}"
+    DEFAULT_WARMUP_FILE_NAME="warmup_${PROFILE_MODEL}.$([[ "$PROFILE_MODEL" == "flux" ]] && printf '%s' png || printf '%s' mp4)"
+    if [[ -n "${WARMUP_OUT:-}" ]]; then
+        WARMUP_OUTPUT_DIR="${WARMUP_OUTPUT_DIR:-$(dirname "$WARMUP_OUT")}"
+        WARMUP_OUTPUT_FILE_NAME="${WARMUP_OUTPUT_FILE_NAME:-$(basename "$WARMUP_OUT")}"
+    else
+        WARMUP_OUTPUT_DIR="${WARMUP_OUTPUT_DIR:-${MODEL_RESULTS_DIR:-$RESULTS_DIR}}"
+        WARMUP_OUTPUT_FILE_NAME="${WARMUP_OUTPUT_FILE_NAME:-$DEFAULT_WARMUP_FILE_NAME}"
+    fi
+    mkdir -p "$WARMUP_OUTPUT_DIR"
+    WARMUP_OUT="${WARMUP_OUTPUT_DIR%/}/${WARMUP_OUTPUT_FILE_NAME}"
     WARMUP_PERF_OUT="${WARMUP_PERF_OUT:-${MODEL_PROFILES_DIR:-$PROFILES_DIR}/perf_${PROFILE_MODEL}_warmup_no_offload_profiled.json}"
 
     echo "=========================================="
@@ -131,7 +141,8 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
     echo "=========================================="
     echo "Start: $(date)"
     echo "Profile model: ${PROFILE_MODEL}"
-    echo "Output: ${WARMUP_OUT}"
+    echo "Batch size: ${NUM_OUTPUTS_PER_PROMPT}"
+    echo "Output: $(format_output_display_path "$WARMUP_OUT" "$NUM_OUTPUTS_PER_PROMPT")"
     echo "DIT_CPU_OFFLOAD_OVERRIDE=${DIT_CPU_OFFLOAD_OVERRIDE_DISPLAY}"
     echo "DIT CPU offload flag: ${DIT_CPU_OFFLOAD_FLAG_DISPLAY}"
     echo "Server port override: ${SERVER_PORT_OVERRIDE:-<default>}"
@@ -141,12 +152,13 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
 
     time sglang generate "${COMMON_FLAGS[@]}" \
         --perf-dump-path "$WARMUP_PERF_OUT" \
-        --output-path "$WARMUP_OUT"
+        --output-path "$WARMUP_OUTPUT_DIR" \
+        --output-file-name "$WARMUP_OUTPUT_FILE_NAME"
 
     echo "End: $(date)"
     echo ""
     echo "Warmup complete."
-    echo "  - Artifact: ${WARMUP_OUT}"
+    echo "  - Artifact: $(format_output_display_path "$WARMUP_OUT" "$NUM_OUTPUTS_PER_PROMPT")"
     echo "  - Perf JSON: ${WARMUP_PERF_OUT}"
     exit 0
 fi
@@ -156,6 +168,8 @@ echo "RUN: Profiled run (nsys)"
 echo "=========================================="
 echo "Start: $(date)"
 echo "Profile model: ${PROFILE_MODEL}"
+echo "Batch size: ${NUM_OUTPUTS_PER_PROMPT}"
+echo "Artifact: $(format_output_display_path "$VIDEO_OUT" "$NUM_OUTPUTS_PER_PROMPT")"
 echo "DIT_CPU_OFFLOAD_OVERRIDE=${DIT_CPU_OFFLOAD_OVERRIDE_DISPLAY}"
 echo "DIT CPU offload flag: ${DIT_CPU_OFFLOAD_FLAG_DISPLAY}"
 echo "Server port override: ${SERVER_PORT_OVERRIDE:-<default>}"
@@ -173,7 +187,8 @@ time nsys profile \
     --output="$NSYS_OUTPUT_PREFIX" \
     sglang generate "${COMMON_FLAGS[@]}" \
     --perf-dump-path "$PERF_OUT" \
-    --output-path "$VIDEO_OUT"
+    --output-path "$OUTPUT_DIR" \
+    --output-file-name "$OUTPUT_FILE_NAME"
 
 echo "End: $(date)"
 
@@ -183,7 +198,7 @@ echo "=========================================="
 echo "Timestamp: $(date)"
 echo ""
 echo "Outputs:"
-echo "  - Artifact: ${VIDEO_OUT}"
+echo "  - Artifact: $(format_output_display_path "$VIDEO_OUT" "$NUM_OUTPUTS_PER_PROMPT")"
 echo "  - nsys profile: ${NSYS_OUTPUT_PREFIX}.nsys-rep"
 echo "  - Perf JSON: ${PERF_OUT}"
 echo ""

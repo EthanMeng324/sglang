@@ -91,6 +91,12 @@ apply_profile_model_defaults() {
     NUM_GPUS="${NUM_GPUS:-2}"
     ULYSSES_DEGREE="${ULYSSES_DEGREE:-2}"
     ATTENTION_BACKEND="${ATTENTION_BACKEND:-sage_attn}"
+    NUM_OUTPUTS_PER_PROMPT="${NUM_OUTPUTS_PER_PROMPT:-${BATCH_SIZE:-1}}"
+    if ! [[ "$NUM_OUTPUTS_PER_PROMPT" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: NUM_OUTPUTS_PER_PROMPT/BATCH_SIZE must be a positive integer."
+        return 1
+    fi
+    BATCH_SIZE="${BATCH_SIZE:-$NUM_OUTPUTS_PER_PROMPT}"
 
     case "$PROFILE_MODEL" in
         flux)
@@ -126,6 +132,36 @@ apply_profile_output_layout() {
     mkdir -p "$MODEL_RESULTS_DIR" "$MODEL_PROFILES_DIR"
 
     NSYS_OUTPUT_PREFIX="${NSYS_OUTPUT_PREFIX:-$MODEL_PROFILES_DIR/$NSYS_BASENAME}"
-    VIDEO_OUT="${VIDEO_OUT:-$MODEL_RESULTS_DIR/${ARTIFACT_BASENAME}.${MEDIA_EXT}}"
+    local default_output_file_name="${ARTIFACT_BASENAME}.${MEDIA_EXT}"
+    if [[ -n "${VIDEO_OUT:-}" ]]; then
+        OUTPUT_DIR="${OUTPUT_DIR:-$(dirname "$VIDEO_OUT")}"
+        OUTPUT_FILE_NAME="${OUTPUT_FILE_NAME:-$(basename "$VIDEO_OUT")}"
+    else
+        OUTPUT_DIR="${OUTPUT_DIR:-$MODEL_RESULTS_DIR}"
+        OUTPUT_FILE_NAME="${OUTPUT_FILE_NAME:-$default_output_file_name}"
+    fi
+    mkdir -p "$OUTPUT_DIR"
+    VIDEO_OUT="${OUTPUT_DIR%/}/${OUTPUT_FILE_NAME}"
     PERF_OUT="${PERF_OUT:-$MODEL_PROFILES_DIR/$PERF_BASENAME}"
+}
+
+format_output_display_path() {
+    local output_path="$1"
+    local num_outputs="${2:-1}"
+
+    if [[ "$num_outputs" -le 1 ]]; then
+        printf '%s' "$output_path"
+        return 0
+    fi
+
+    local output_dir
+    local output_file
+    output_dir="$(dirname "$output_path")"
+    output_file="$(basename "$output_path")"
+
+    if [[ "$output_file" == *.* ]]; then
+        printf '%s/%s_<idx>.%s' "$output_dir" "${output_file%.*}" "${output_file##*.}"
+    else
+        printf '%s/%s_<idx>' "$output_dir" "$output_file"
+    fi
 }
