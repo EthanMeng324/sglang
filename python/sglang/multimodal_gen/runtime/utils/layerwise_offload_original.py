@@ -4,10 +4,19 @@ from typing import Any, Dict, List, Set, Tuple
 
 import torch
 
+from sglang.multimodal_gen.runtime.managers.forward_context import get_forward_context
 from sglang.multimodal_gen.runtime.server_args import ServerArgs
 from sglang.multimodal_gen.runtime.utils.logging_utils import init_logger
 
 logger = init_logger(__name__)
+
+
+@torch.compiler.disable
+def _set_current_offload_layer_label(label: str | None) -> None:
+    try:
+        setattr(get_forward_context(), "offload_layer_label", label)
+    except Exception:
+        return
 
 
 # Adapted from skywork AI Infra diffusion optimize
@@ -393,14 +402,21 @@ class LayerwiseOffloadManager:
                 gpu_buffer = torch.empty(
                     cpu_buffer.shape, dtype=dtype, device=self.device
                 )
+                push_detail_nvtx = False
                 if torch.cuda.is_available() and hasattr(torch.cuda, "nvtx"):
                     torch.cuda.nvtx.range_push("SGL_PREFETCH_H2D")
+                    torch.cuda.nvtx.range_push(
+                        f"SGL_PREFETCH_H2D_DETAIL:{self.layers_attr_str}.{layer_idx}"
+                    )
+                    push_detail_nvtx = True
                 try:
                     gpu_buffer.copy_(cpu_buffer, non_blocking=non_blocking)
                     copy_done_event = torch.cuda.Event()
                     copy_done_event.record(self.copy_stream)
                 finally:
                     if torch.cuda.is_available() and hasattr(torch.cuda, "nvtx"):
+                        if push_detail_nvtx:
+                            torch.cuda.nvtx.range_pop()
                         torch.cuda.nvtx.range_pop()
                 gpu_buffers[dtype] = gpu_buffer
                 copy_events.append(
@@ -601,6 +617,7 @@ class LayerwiseOffloadManager:
         def make_pre_hook(i):
             @torch.compiler.disable
             def hook(module, input):
+                _set_current_offload_layer_label(f"{self.layers_attr_str}.{i}")
                 if i == 0:
                     self._begin_profile_step()
                 step_idx = self._current_profile_step_idx()
@@ -651,6 +668,7 @@ class LayerwiseOffloadManager:
                 # previous, we wait here, until the copy stream for next layer is finished,
                 # now with any prefetch_size, only wait for the copy stream, when the copy stream is for the next layer
                 self.release_layer(i)
+                _set_current_offload_layer_label(None)
                 if i == self.num_layers - 1:
                     self._record_runtime_state(
                         self._runtime_state_end, self._current_profile_step_idx()

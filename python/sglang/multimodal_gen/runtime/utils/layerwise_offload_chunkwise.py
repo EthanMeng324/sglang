@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List, Sequence, Set, Tuple
 
 import torch
 
+from sglang.multimodal_gen.runtime.managers.forward_context import get_forward_context
 from sglang.multimodal_gen.runtime.server_args import ServerArgs
 from sglang.multimodal_gen.runtime.utils.comm_aware_prefetch import (
     CommunicationActivityTracker,
@@ -16,6 +17,14 @@ from sglang.multimodal_gen.runtime.utils.comm_aware_prefetch import (
 from sglang.multimodal_gen.runtime.utils.logging_utils import init_logger
 
 logger = init_logger(__name__)
+
+
+@torch.compiler.disable
+def _set_current_offload_layer_label(label: str | None) -> None:
+    try:
+        setattr(get_forward_context(), "offload_layer_label", label)
+    except Exception:
+        return
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -944,11 +953,17 @@ class LayerwiseOffloadManager:
                 nbytes = (chosen_end - chosen_start) * src.element_size()
 
             push_nvtx = bool(torch.cuda.is_available() and hasattr(torch.cuda, "nvtx"))
+            push_detail_nvtx = False
             if push_nvtx:
                 torch.cuda.nvtx.range_push(
                     "SGL_PREFETCH_H2D_BG" if background else "SGL_PREFETCH_H2D_SYNC"
                 )
                 torch.cuda.nvtx.range_push("SGL_PREFETCH_H2D")
+                torch.cuda.nvtx.range_push(
+                    "SGL_PREFETCH_H2D_DETAIL:"
+                    f"{self.layers_attr_str}.{layer_idx}.phase{phase_idx}"
+                )
+                push_detail_nvtx = True
             try:
                 copy_t0 = time.perf_counter()
                 with torch.cuda.stream(self.copy_stream):
@@ -959,6 +974,8 @@ class LayerwiseOffloadManager:
                 copy_dur_s = time.perf_counter() - copy_t0
             finally:
                 if push_nvtx:
+                    if push_detail_nvtx:
+                        torch.cuda.nvtx.range_pop()
                     torch.cuda.nvtx.range_pop()
                     torch.cuda.nvtx.range_pop()
 
@@ -1059,12 +1076,20 @@ class LayerwiseOffloadManager:
 
         ensure_t0 = time.perf_counter()
         push_nvtx = bool(torch.cuda.is_available() and hasattr(torch.cuda, "nvtx"))
+        push_detail_nvtx = False
         if push_nvtx:
             torch.cuda.nvtx.range_push(
                 "SGL_PREFETCH_ENSURE_PHASE_READY"
                 if target_phase_idx is not None
                 else "SGL_PREFETCH_ENSURE_READY"
             )
+            detail_suffix = (
+                f"{self.layers_attr_str}.{layer_idx}.phase{target_phase_idx}"
+                if target_phase_idx is not None
+                else f"{self.layers_attr_str}.{layer_idx}"
+            )
+            torch.cuda.nvtx.range_push(f"SGL_PREFETCH_ENSURE_DETAIL:{detail_suffix}")
+            push_detail_nvtx = True
         try:
             with self._state_lock:
                 if target_phase_idx is not None:
@@ -1135,6 +1160,8 @@ class LayerwiseOffloadManager:
                     self._urgent_layer = None
         finally:
             if push_nvtx:
+                if push_detail_nvtx:
+                    torch.cuda.nvtx.range_pop()
                 torch.cuda.nvtx.range_pop()
             self._record_ensure_ready_stats(time.perf_counter() - ensure_t0)
 
@@ -1518,6 +1545,7 @@ class LayerwiseOffloadManager:
         def make_pre_hook(i):
             @torch.compiler.disable
             def hook(module, input):
+                _set_current_offload_layer_label(f"{self.layers_attr_str}.{i}")
                 if i == 0:
                     self._begin_step_stats()
                     # Keep this async to avoid main-thread prefetch catch-up.
@@ -1544,6 +1572,7 @@ class LayerwiseOffloadManager:
             @torch.compiler.disable
             def hook(module, input, output):
                 self.release_layer(i)
+                _set_current_offload_layer_label(None)
                 if i == self.num_layers - 1:
                     self._end_step_stats()
 

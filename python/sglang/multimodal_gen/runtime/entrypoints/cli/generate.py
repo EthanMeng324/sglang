@@ -93,6 +93,7 @@ def maybe_dump_performance(
             reserved_mb=snapshot_dict.get("reserved_mb", 0.0),
             peak_allocated_mb=snapshot_dict.get("peak_allocated_mb", 0.0),
             peak_reserved_mb=snapshot_dict.get("peak_reserved_mb", 0.0),
+            allocator_stats_mb=snapshot_dict.get("allocator_stats_mb", {}),
         )
         metrics.memory_snapshots[checkpoint_name] = snapshot
 

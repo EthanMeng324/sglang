@@ -42,6 +42,15 @@ def _get_comm_quiesce_fn():
 
 
 @torch.compiler.disable
+def _get_current_offload_layer_label() -> str | None:
+    try:
+        label = getattr(get_forward_context(), "offload_layer_label", None)
+    except Exception:
+        return None
+    return label if isinstance(label, str) and label else None
+
+
+@torch.compiler.disable
 def _mark_comm_start(tracker, tag: str) -> None:
     if tracker is not None:
         tracker.mark_start(tag)
@@ -78,6 +87,7 @@ def _usp_all_to_all_single(x: torch.Tensor, tag: str) -> torch.Tensor:
     quiesce_fn = _get_comm_quiesce_fn()
     push_nvtx = bool(torch.cuda.is_available() and hasattr(torch.cuda, "nvtx"))
     nvtx_pushed = False
+    detail_nvtx_pushed = False
     _mark_comm_start(tracker, tag)
     try:
         # Mirror mock-comm correctness: freeze new launches and drain in-flight
@@ -86,6 +96,12 @@ def _usp_all_to_all_single(x: torch.Tensor, tag: str) -> torch.Tensor:
         if push_nvtx:
             nvtx_label = f"SGL_REAL_COMM_USP_DEV{torch.cuda.current_device()}"
             torch.cuda.nvtx.range_push(nvtx_label)
+            detail_label = _get_current_offload_layer_label()
+            if detail_label is not None:
+                torch.cuda.nvtx.range_push(
+                    f"SGL_REAL_COMM_USP_DETAIL:{detail_label}:DEV{torch.cuda.current_device()}"
+                )
+                detail_nvtx_pushed = True
             nvtx_pushed = True
         x = ft_c.all_to_all_single(
             x, output_split_sizes=None, input_split_sizes=None, group=ulysses_pg
@@ -96,6 +112,8 @@ def _usp_all_to_all_single(x: torch.Tensor, tag: str) -> torch.Tensor:
     finally:
         if nvtx_pushed:
             try:
+                if detail_nvtx_pushed:
+                    torch.cuda.nvtx.range_pop()
                 torch.cuda.nvtx.range_pop()
             except Exception:
                 pass
