@@ -232,11 +232,21 @@ printf '%s,%s,%s,%s,%s\n' \
     "$PROFILE_MODEL" \
     "$GPU_QUERY_OUTPUT_PATH" >>"$TIMELINE_LOG_PATH"
 
-python "$SCRIPT_DIR/analyze_clock_drop.py" \
-    --timeline "$TIMELINE_LOG_PATH" \
-    --telemetry "$GPU_QUERY_OUTPUT_PATH" \
-    --output-md "$GPU_QUERY_SUMMARY_MD" \
-    --output-csv "$GPU_QUERY_SUMMARY_CSV"
+if [[ ! -f "$TIMELINE_LOG_PATH" ]]; then
+    echo "WARNING: timeline log not found, skipping telemetry summary: $TIMELINE_LOG_PATH" >&2
+elif [[ ! -f "$GPU_QUERY_OUTPUT_PATH" ]]; then
+    echo "WARNING: telemetry CSV not found, skipping telemetry summary: $GPU_QUERY_OUTPUT_PATH" >&2
+else
+    if ! python "$SCRIPT_DIR/analyze_clock_drop.py" \
+        --timeline "$TIMELINE_LOG_PATH" \
+        --telemetry "$GPU_QUERY_OUTPUT_PATH" \
+        --output-md "$GPU_QUERY_SUMMARY_MD" \
+        --output-csv "$GPU_QUERY_SUMMARY_CSV"; then
+        echo "WARNING: telemetry summary generation failed." >&2
+        echo "Re-run manually with:" >&2
+        echo "  python $SCRIPT_DIR/analyze_clock_drop.py --timeline $TIMELINE_LOG_PATH --telemetry $GPU_QUERY_OUTPUT_PATH --output-md $GPU_QUERY_SUMMARY_MD --output-csv $GPU_QUERY_SUMMARY_CSV" >&2
+    fi
+fi
 
 echo ""
 echo "=========================================="
