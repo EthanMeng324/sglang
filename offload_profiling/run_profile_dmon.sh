@@ -103,6 +103,7 @@ GPU_QUERY_SUMMARY_MD="${GPU_QUERY_SUMMARY_MD:-${MODEL_PROFILES_DIR}/telemetry_su
 GPU_QUERY_SUMMARY_CSV="${GPU_QUERY_SUMMARY_CSV:-${MODEL_PROFILES_DIR}/telemetry_summary_${PROFILE_MODEL}_${TIMESTAMP}.csv}"
 GPU_QUERY_FIELDS="${GPU_QUERY_FIELDS:-timestamp,index,name,pstate,clocks.current.graphics,clocks.max.graphics,temperature.gpu,temperature.memory,power.draw,power.limit,enforced.power.limit,utilization.gpu,utilization.memory,memory.used,clocks_event_reasons.active,clocks_event_reasons.gpu_idle,clocks_event_reasons.applications_clocks_setting,clocks_event_reasons.sw_power_cap,clocks_event_reasons.hw_slowdown,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_power_brake_slowdown,clocks_event_reasons.sw_thermal_slowdown,clocks_event_reasons.sync_boost}"
 TIMELINE_LOG_PATH="${TIMELINE_LOG_PATH:-${MODEL_PROFILES_DIR}/timeline_${PROFILE_MODEL}_${TIMESTAMP}.log}"
+TELEMETRY_LOCAL_UTC_OFFSET="${TELEMETRY_LOCAL_UTC_OFFSET:-$(date +%z)}"
 mkdir -p "$(dirname "$DMON_OUTPUT_PATH")"
 
 DMON_PID=""
@@ -157,6 +158,7 @@ echo "DMON output  : ${DMON_OUTPUT_PATH}"
 echo "GPU telemetry: ${GPU_QUERY_OUTPUT_PATH}"
 echo "Summary md   : ${GPU_QUERY_SUMMARY_MD}"
 echo "Timeline log : ${TIMELINE_LOG_PATH}"
+echo "Telemetry TZ : ${TELEMETRY_LOCAL_UTC_OFFSET}"
 echo "DMON metrics : ${DMON_METRICS}"
 echo "DMON period  : ${DMON_INTERVAL_SEC}s"
 echo "Query period : ${GPU_QUERY_INTERVAL_SEC}s"
@@ -237,7 +239,7 @@ if [[ ! -f "$TIMELINE_LOG_PATH" ]]; then
 elif [[ ! -f "$GPU_QUERY_OUTPUT_PATH" ]]; then
     echo "WARNING: telemetry CSV not found, skipping telemetry summary: $GPU_QUERY_OUTPUT_PATH" >&2
 else
-    if ! python "$SCRIPT_DIR/analyze_clock_drop.py" \
+    if ! TELEMETRY_LOCAL_UTC_OFFSET="$TELEMETRY_LOCAL_UTC_OFFSET" python "$SCRIPT_DIR/analyze_clock_drop.py" \
         --timeline "$TIMELINE_LOG_PATH" \
         --telemetry "$GPU_QUERY_OUTPUT_PATH" \
         --output-md "$GPU_QUERY_SUMMARY_MD" \

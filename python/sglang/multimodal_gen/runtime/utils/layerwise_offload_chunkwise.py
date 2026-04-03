@@ -190,6 +190,8 @@ class LayerwiseOffloadManager:
             Tuple[int, int, torch.cuda.Event, torch.cuda.Event]
         ] = []
         self._prefetch_wait_byte_records: List[Tuple[int, int, int]] = []
+        self._runtime_state_begin: Dict[int, Dict[str, float]] = {}
+        self._runtime_state_end: Dict[int, Dict[str, float]] = {}
 
         self._initialize()
 
@@ -357,6 +359,8 @@ class LayerwiseOffloadManager:
             self._step_ensure_ready_s = 0.0
             self._step_unique_loaded_bytes = 0
             self._step_unique_loaded_layers = set()
+            step_idx = self._current_profile_step_idx()
+            self._record_runtime_state_locked(self._runtime_state_begin, step_idx)
 
     def _record_copy_stats(self, *, background: bool, nbytes: int, dur_s: float) -> None:
         with self._state_lock:
@@ -496,6 +500,87 @@ class LayerwiseOffloadManager:
             (step_idx, int(max(0, waited_bytes)), int(max(0, total_bytes)))
         )
 
+    def _snapshot_runtime_state_locked(self) -> Dict[str, float]:
+        prefetch_buffer_bytes = 0
+        for phase_buffers in self._prefetch_gpu_buffers.values():
+            for dtype_buffers in phase_buffers.values():
+                for tensor in dtype_buffers.values():
+                    prefetch_buffer_bytes += int(tensor.numel() * tensor.element_size())
+
+        resident_phase_bytes = 0
+        if self._resident_phase_ids:
+            for phase_bytes_by_idx in self._phase_total_bytes.values():
+                for phase_idx, phase_bytes in phase_bytes_by_idx.items():
+                    if phase_idx in self._resident_phase_ids:
+                        resident_phase_bytes += int(phase_bytes)
+
+        materialized_layer_count = 0
+        materialized_phase_count = 0
+        for layer_idx in self._weight_metadata:
+            layer_has_materialized_phase = False
+            for phase_idx in range(len(self.phase_specs)):
+                if self._phase_materialized_locked(layer_idx, phase_idx):
+                    materialized_phase_count += 1
+                    layer_has_materialized_phase = True
+            if layer_has_materialized_phase:
+                materialized_layer_count += 1
+
+        warm_layer0_loaded = 0.0
+        if 0 in self._weight_metadata:
+            for phase_idx in range(len(self.phase_specs)):
+                if self._phase_materialized_locked(0, phase_idx):
+                    warm_layer0_loaded = 1.0
+                    break
+
+        return {
+            "offload_managed_gpu_bytes": float(
+                prefetch_buffer_bytes + resident_phase_bytes
+            ),
+            "offload_prefetch_buffer_bytes": float(prefetch_buffer_bytes),
+            "offload_resident_phase_bytes": float(resident_phase_bytes),
+            "offload_materialized_layer_count": float(materialized_layer_count),
+            "offload_materialized_phase_count": float(materialized_phase_count),
+            "offload_gpu_layer_count": float(len(self._gpu_layers)),
+            "offload_warm_layer0_loaded": warm_layer0_loaded,
+        }
+
+    def _record_runtime_state_locked(
+        self, bucket: Dict[int, Dict[str, float]], step_idx: int
+    ) -> None:
+        bucket[step_idx] = self._snapshot_runtime_state_locked()
+
+    @staticmethod
+    def _state_records_to_series(
+        records: Dict[int, Dict[str, float]]
+    ) -> Dict[str, List[float]]:
+        if not records:
+            return {}
+        max_step = max(records.keys())
+        metric_names = sorted({name for state in records.values() for name in state})
+        series = {name: [0.0] * (max_step + 1) for name in metric_names}
+        for step_idx, state in records.items():
+            for name, value in state.items():
+                series[name][step_idx] = float(value)
+        return series
+
+    def collect_runtime_debug(self) -> Dict[str, Any]:
+        if not self.enabled or self.device is None:
+            return {}
+        with self._state_lock:
+            current_state = self._snapshot_runtime_state_locked()
+        return {
+            "layers_attr_str": self.layers_attr_str,
+            "num_layers": self.num_layers,
+            "prefetch_size": self.prefetch_size,
+            "phase_names": [spec.name for spec in self.phase_specs],
+            "resident_phase_names": sorted(self.resident_phase_names),
+            "step_state_begin": self._state_records_to_series(
+                self._runtime_state_begin
+            ),
+            "step_state_end": self._state_records_to_series(self._runtime_state_end),
+            "current_state": current_state,
+        }
+
     @torch.compiler.disable
     def collect_profile_metrics(self) -> Dict[str, List[float]]:
         if not self.enabled or self.device is None:
@@ -559,17 +644,26 @@ class LayerwiseOffloadManager:
                 event_errors,
             )
 
-        return {
+        result = {
             "prefetch_critical_path_wait_ms": wait_ms_list,
             "prefetch_critical_path_wait_layers": wait_layers_list,
             "prefetch_critical_path_waited_bytes": waited_bytes_list,
             "prefetch_critical_path_total_bytes": total_bytes_list,
         }
+        for suffix, records in (
+            ("begin", self._runtime_state_begin),
+            ("end", self._runtime_state_end),
+        ):
+            for name, values in self._state_records_to_series(records).items():
+                result[f"{name}_{suffix}"] = values
+        return result
 
     def _end_step_stats(self) -> None:
         with self._state_lock:
             if not self._step_active:
                 return
+            step_idx = self._current_profile_step_idx()
+            self._record_runtime_state_locked(self._runtime_state_end, step_idx)
             step = self._step_seq
             wall_s = max(0.0, time.perf_counter() - self._step_wall_start)
             bg_chunks = self._step_bg_chunks
@@ -1666,6 +1760,21 @@ class OffloadableDiTMixin:
                 for idx, value in enumerate(values):
                     merged[key][idx] += value
         return merged
+
+    def collect_offload_runtime_debug(self) -> Dict[str, Any]:
+        if not self.layerwise_offload_managers:
+            return {}
+
+        managers = []
+        for manager in self.layerwise_offload_managers:
+            if not manager.enabled:
+                continue
+            data = manager.collect_runtime_debug()
+            if data:
+                managers.append(data)
+        if not managers:
+            return {}
+        return {"managers": managers}
 
 
 def iter_materialized_weights(module: torch.nn.Module):

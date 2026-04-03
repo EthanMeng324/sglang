@@ -34,6 +34,7 @@ class MemorySnapshot:
     reserved_mb: float  # current reserved memory (actual VRAM)
     peak_allocated_mb: float  # peak allocated since last reset
     peak_reserved_mb: float  # peak reserved since last reset
+    allocator_stats_mb: Dict[str, float] = dataclasses.field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -41,6 +42,10 @@ class MemorySnapshot:
             "reserved_mb": round(self.reserved_mb, 2),
             "peak_allocated_mb": round(self.peak_allocated_mb, 2),
             "peak_reserved_mb": round(self.peak_reserved_mb, 2),
+            "allocator_stats_mb": {
+                name: round(value, 2)
+                for name, value in self.allocator_stats_mb.items()
+            },
         }
 
 
@@ -162,12 +167,27 @@ def capture_memory_snapshot() -> MemorySnapshot:
     reserved = torch.cuda.memory_reserved()
     peak_allocated = torch.cuda.max_memory_allocated()
     peak_reserved = torch.cuda.max_memory_reserved()
+    raw_stats = torch.cuda.memory_stats()
+    allocator_stat_names = {
+        "allocated_bytes.all.current": "allocator_allocated_bytes_mb",
+        "active_bytes.all.current": "allocator_active_bytes_mb",
+        "reserved_bytes.all.current": "allocator_reserved_bytes_mb",
+        "segment_bytes.all.current": "allocator_segment_bytes_mb",
+        "inactive_split_bytes.all.current": "allocator_inactive_split_bytes_mb",
+        "requested_bytes.all.current": "allocator_requested_bytes_mb",
+    }
+    allocator_stats_mb = {}
+    for raw_name, friendly_name in allocator_stat_names.items():
+        value = raw_stats.get(raw_name)
+        if isinstance(value, (int, float)):
+            allocator_stats_mb[friendly_name] = float(value) / (1024**2)
 
     return MemorySnapshot(
         allocated_mb=allocated / (1024**2),
         reserved_mb=reserved / (1024**2),
         peak_allocated_mb=peak_allocated / (1024**2),
         peak_reserved_mb=peak_reserved / (1024**2),
+        allocator_stats_mb=allocator_stats_mb,
     )
 
 

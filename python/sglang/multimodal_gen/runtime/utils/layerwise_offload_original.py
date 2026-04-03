@@ -75,6 +75,8 @@ class LayerwiseOffloadManager:
             Tuple[int, int, torch.cuda.Event, torch.cuda.Event]
         ] = []
         self._prefetch_wait_byte_records: List[Tuple[int, int, int]] = []
+        self._runtime_state_begin: Dict[int, Dict[str, float]] = {}
+        self._runtime_state_end: Dict[int, Dict[str, float]] = {}
 
         self._initialize()
 
@@ -169,6 +171,9 @@ class LayerwiseOffloadManager:
 
     def _begin_profile_step(self) -> None:
         self._profile_step_seq += 1
+        self._record_runtime_state(
+            self._runtime_state_begin, self._current_profile_step_idx()
+        )
 
     @torch.compiler.disable
     def _current_profile_step_idx(self) -> int:
@@ -179,6 +184,58 @@ class LayerwiseOffloadManager:
     @torch.compiler.disable
     def set_logical_step_idx(self, step_idx: int | None) -> None:
         self._logical_step_idx = step_idx
+
+    def _snapshot_runtime_state(self) -> Dict[str, float]:
+        managed_gpu_bytes = float(
+            sum(int(self._layer_total_bytes.get(layer_idx, 0)) for layer_idx in self._gpu_layers)
+        )
+        materialized_layer_count = float(len(self._gpu_layers))
+        warm_layer0_loaded = 1.0 if 0 in self._gpu_layers else 0.0
+        return {
+            "offload_managed_gpu_bytes": managed_gpu_bytes,
+            "offload_prefetch_buffer_bytes": managed_gpu_bytes,
+            "offload_resident_phase_bytes": 0.0,
+            "offload_materialized_layer_count": materialized_layer_count,
+            "offload_materialized_phase_count": materialized_layer_count,
+            "offload_gpu_layer_count": materialized_layer_count,
+            "offload_warm_layer0_loaded": warm_layer0_loaded,
+        }
+
+    def _record_runtime_state(
+        self, bucket: Dict[int, Dict[str, float]], step_idx: int
+    ) -> None:
+        if not self.enabled:
+            return
+        bucket[step_idx] = self._snapshot_runtime_state()
+
+    @staticmethod
+    def _state_records_to_series(
+        records: Dict[int, Dict[str, float]]
+    ) -> Dict[str, List[float]]:
+        if not records:
+            return {}
+        max_step = max(records.keys())
+        metric_names = sorted({name for state in records.values() for name in state})
+        series = {name: [0.0] * (max_step + 1) for name in metric_names}
+        for step_idx, state in records.items():
+            for name, value in state.items():
+                series[name][step_idx] = float(value)
+        return series
+
+    def collect_runtime_debug(self) -> Dict[str, Any]:
+        if not self.enabled:
+            return {}
+        return {
+            "layers_attr_str": self.layers_attr_str,
+            "num_layers": self.num_layers,
+            "prefetch_size": self.prefetch_size,
+            "phase_names": ["layer"],
+            "step_state_begin": self._state_records_to_series(
+                self._runtime_state_begin
+            ),
+            "step_state_end": self._state_records_to_series(self._runtime_state_end),
+            "current_state": self._snapshot_runtime_state(),
+        }
 
     @torch.compiler.disable
     def _record_prefetch_cp_wait_start(self) -> torch.cuda.Event | None:
@@ -299,12 +356,19 @@ class LayerwiseOffloadManager:
                 event_errors,
             )
 
-        return {
+        result = {
             "prefetch_critical_path_wait_ms": wait_ms_list,
             "prefetch_critical_path_wait_layers": wait_layers_list,
             "prefetch_critical_path_waited_bytes": waited_bytes_list,
             "prefetch_critical_path_total_bytes": total_bytes_list,
         }
+        for suffix, records in (
+            ("begin", self._runtime_state_begin),
+            ("end", self._runtime_state_end),
+        ):
+            for name, values in self._state_records_to_series(records).items():
+                result[f"{name}_{suffix}"] = values
+        return result
 
     @torch.compiler.disable
     def prefetch_layer(self, layer_idx: int, non_blocking: bool = True) -> None:
@@ -587,6 +651,10 @@ class LayerwiseOffloadManager:
                 # previous, we wait here, until the copy stream for next layer is finished,
                 # now with any prefetch_size, only wait for the copy stream, when the copy stream is for the next layer
                 self.release_layer(i)
+                if i == self.num_layers - 1:
+                    self._record_runtime_state(
+                        self._runtime_state_end, self._current_profile_step_idx()
+                    )
 
             return hook
 
@@ -707,6 +775,21 @@ class OffloadableDiTMixin:
                 for idx, value in enumerate(values):
                     merged[key][idx] += value
         return merged
+
+    def collect_offload_runtime_debug(self) -> Dict[str, Any]:
+        if not self.layerwise_offload_managers:
+            return {}
+
+        managers = []
+        for manager in self.layerwise_offload_managers:
+            if not manager.enabled:
+                continue
+            data = manager.collect_runtime_debug()
+            if data:
+                managers.append(data)
+        if not managers:
+            return {}
+        return {"managers": managers}
 
 
 def iter_materialized_weights(module: torch.nn.Module):

@@ -236,6 +236,30 @@ class GPUWorker:
         merged["source"] = "runtime_cuda_events"
         return merged
 
+    def _collect_offload_runtime_debug(self) -> dict | None:
+        if self.pipeline is None:
+            return None
+
+        modules: dict[str, dict] = {}
+        for module_name in ("transformer", "transformer_2", "video_dit", "audio_dit"):
+            module = self.pipeline.get_module(module_name)
+            collect_fn = getattr(module, "collect_offload_runtime_debug", None)
+            if not callable(collect_fn):
+                continue
+
+            data = collect_fn()
+            if not data:
+                continue
+            modules[module_name] = data
+
+        if not modules:
+            return None
+
+        return {
+            "source": "runtime_manager_snapshots",
+            "modules": modules,
+        }
+
     def execute_forward(self, batch: List[Req]) -> OutputBatch:
         """
         Execute a forward pass.
@@ -286,6 +310,11 @@ class GPUWorker:
             offload_profile = self._collect_offload_profile_metrics()
             if output_batch.metrics and offload_profile:
                 output_batch.metrics.record_extra("offload_profile", offload_profile)
+            offload_runtime_debug = self._collect_offload_runtime_debug()
+            if output_batch.metrics and offload_runtime_debug:
+                output_batch.metrics.record_extra(
+                    "offload_runtime_debug", offload_runtime_debug
+                )
 
             # Save output to file and return file path only if requested. Avoid the serialization
             # and deserialization overhead between scheduler_client and gpu_worker.

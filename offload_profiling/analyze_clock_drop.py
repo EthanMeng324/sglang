@@ -3,8 +3,9 @@
 import argparse
 import csv
 import math
+import os
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from statistics import median
 
@@ -28,6 +29,22 @@ REASON_FIELDS = [
 ]
 
 DENSE_UTIL_THRESHOLD = 90.0
+
+
+def get_telemetry_timezone():
+    tz_value = os.environ.get("TELEMETRY_LOCAL_UTC_OFFSET", "").strip()
+    if not tz_value:
+        return timezone.utc
+    sign = 1 if tz_value.startswith("+") else -1
+    try:
+        hours = int(tz_value[1:3])
+        minutes = int(tz_value[3:5])
+    except Exception:
+        return timezone.utc
+    return timezone(sign * timedelta(hours=hours, minutes=minutes))
+
+
+LOCAL_TZ = get_telemetry_timezone()
 
 
 def parse_args():
@@ -94,15 +111,18 @@ def parse_bool_field(value: str) -> bool:
 
 
 def parse_telemetry_timestamp(value: str) -> float:
-    return datetime.strptime(value.strip(), "%Y/%m/%d %H:%M:%S.%f").replace(
-        tzinfo=timezone.utc
-    ).timestamp()
+    return (
+        datetime.strptime(value.strip(), "%Y/%m/%d %H:%M:%S.%f")
+        .replace(tzinfo=LOCAL_TZ)
+        .astimezone(timezone.utc)
+        .timestamp()
+    )
 
 
 def load_telemetry(path: Path):
     rows = []
     with path.open(newline="") as f:
-        reader = csv.DictReader(f)
+        reader = csv.DictReader(f, skipinitialspace=True)
         for row in reader:
             try:
                 ts = parse_telemetry_timestamp(row["timestamp"])
@@ -163,6 +183,12 @@ def fmt(value, digits=1):
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return "N/A"
     return f"{value:.{digits}f}"
+
+
+def fmt_pct_ratio(value, digits=1):
+    if value is None:
+        return "N/A"
+    return fmt(100.0 * value, digits=digits)
 
 
 def summarize(stages, telemetry_rows):
@@ -286,13 +312,13 @@ def write_markdown(path: Path, rows):
                         fmt(row["gtemp_avg_dense_c"]),
                         fmt(row["mtemp_avg_dense_c"]),
                         fmt(row["fb_used_avg_dense_mb"]),
-                        fmt(100.0 * row["pclk_lt_1200_frac_dense"]),
-                        fmt(100.0 * row["clocks_event_reasons.sw_power_cap_frac_dense"]),
-                        fmt(100.0 * row["clocks_event_reasons.sw_thermal_slowdown_frac_dense"]),
-                        fmt(100.0 * row["clocks_event_reasons.hw_thermal_slowdown_frac_dense"]),
-                        fmt(100.0 * row["clocks_event_reasons.hw_power_brake_slowdown_frac_dense"]),
-                        fmt(100.0 * row["clocks_event_reasons.hw_slowdown_frac_dense"]),
-                        fmt(100.0 * row["clocks_event_reasons.sync_boost_frac_dense"]),
+                        fmt_pct_ratio(row["pclk_lt_1200_frac_dense"]),
+                        fmt_pct_ratio(row["clocks_event_reasons.sw_power_cap_frac_dense"]),
+                        fmt_pct_ratio(row["clocks_event_reasons.sw_thermal_slowdown_frac_dense"]),
+                        fmt_pct_ratio(row["clocks_event_reasons.hw_thermal_slowdown_frac_dense"]),
+                        fmt_pct_ratio(row["clocks_event_reasons.hw_power_brake_slowdown_frac_dense"]),
+                        fmt_pct_ratio(row["clocks_event_reasons.hw_slowdown_frac_dense"]),
+                        fmt_pct_ratio(row["clocks_event_reasons.sync_boost_frac_dense"]),
                     ]
                 )
                 + " |"
