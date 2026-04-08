@@ -1,3 +1,4 @@
+import os
 import re
 from itertools import chain
 from typing import Any, Dict, List, Set, Tuple
@@ -17,6 +18,13 @@ def _set_current_offload_layer_label(label: str | None) -> None:
         setattr(get_forward_context(), "offload_layer_label", label)
     except Exception:
         return
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 # Adapted from skywork AI Infra diffusion optimize
@@ -155,6 +163,10 @@ class LayerwiseOffloadManager:
 
         # prefetch the first layer for warm-up
         self.prepare_for_next_req(non_blocking=False)
+        if torch.cuda.is_available() and _env_bool(
+            "SGLANG_OFFLOAD_EMPTY_CACHE_AFTER_INIT", False
+        ):
+            torch.cuda.empty_cache()
 
         self.register_forward_hooks()
         logger.info(

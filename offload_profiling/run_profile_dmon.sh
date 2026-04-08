@@ -17,6 +17,7 @@ Supported models:
   wanvideo
   hunyuanvideo
   flux
+  flux_2
 
 This wrapper:
   1. starts nvidia-smi dmon in the background
@@ -33,7 +34,11 @@ Optional env vars:
   GPU_QUERY_INTERVAL_SEC  Sampling interval for detailed telemetry. Default: 1
   GPU_QUERY_OUTPUT_PATH   Optional explicit detailed telemetry CSV path
   GPU_QUERY_FIELDS        Optional explicit --query-gpu field list
-  BATCH_SIZE / NUM_OUTPUTS_PER_PROMPT  Number of outputs per prompt (useful for flux)
+  BATCH_SIZE / NUM_OUTPUTS_PER_PROMPT  Number of outputs per prompt (useful for flux/flux_2)
+  SGLANG_DIT_OFFLOAD_RESIDENT_PHASES
+    wanvideo: entry,self_attn_tail,cross_attn,ffn
+    hunyuanvideo: double_blocks -> entry,self_attn_tail,ffn; single_blocks -> entry,tail
+    flux / flux_2: transformer_blocks -> entry,self_attn_tail,ffn; single_transformer_blocks -> entry,tail
 EOF
 }
 

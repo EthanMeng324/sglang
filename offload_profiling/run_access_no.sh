@@ -43,7 +43,7 @@ resolve_profile_model no "${1:-}"
 apply_profile_model_defaults
 apply_profile_output_layout
 
-if [[ "$PROFILE_MODEL" == "flux" ]]; then
+if profile_model_is_image; then
     export SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING="${SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING:-1}"
 fi
 
@@ -124,7 +124,11 @@ export SGLANG_WAN_MOCK_COMM_MAX_MB="${SGLANG_WAN_MOCK_COMM_MAX_MB:-256}"
 export SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES="${SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES:-0}"
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
-    DEFAULT_WARMUP_FILE_NAME="warmup_${PROFILE_MODEL}.$([[ "$PROFILE_MODEL" == "flux" ]] && printf '%s' png || printf '%s' mp4)"
+    DEFAULT_WARMUP_EXT="mp4"
+    if profile_model_is_image; then
+        DEFAULT_WARMUP_EXT="png"
+    fi
+    DEFAULT_WARMUP_FILE_NAME="warmup_${PROFILE_MODEL}.${DEFAULT_WARMUP_EXT}"
     if [[ -n "${WARMUP_OUT:-}" ]]; then
         WARMUP_OUTPUT_DIR="${WARMUP_OUTPUT_DIR:-$(dirname "$WARMUP_OUT")}"
         WARMUP_OUTPUT_FILE_NAME="${WARMUP_OUTPUT_FILE_NAME:-$(basename "$WARMUP_OUT")}"

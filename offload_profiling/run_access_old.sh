@@ -43,7 +43,7 @@ resolve_profile_model old "${1:-}"
 apply_profile_model_defaults
 apply_profile_output_layout
 
-if [[ "$PROFILE_MODEL" == "flux" ]]; then
+if profile_model_is_image; then
     export SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING="${SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING:-1}"
 fi
 

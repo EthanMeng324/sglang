@@ -54,7 +54,10 @@ from sglang.multimodal_gen.runtime.layers.visual_embedding import (
 from sglang.multimodal_gen.runtime.managers.forward_context import get_forward_context
 from sglang.multimodal_gen.runtime.models.dits.base import CachableDiT
 from sglang.multimodal_gen.runtime.platforms import current_platform
-from sglang.multimodal_gen.runtime.utils.layerwise_offload import OffloadableDiTMixin
+from sglang.multimodal_gen.runtime.utils.layerwise_offload import (
+    OffloadableDiTMixin,
+    PhaseSpec,
+)
 from sglang.multimodal_gen.runtime.utils.logging_utils import init_logger
 
 logger = init_logger(__name__)  # pylint: disable=invalid-name
@@ -340,6 +343,7 @@ class FluxAttention(torch.nn.Module, AttentionModuleMixin):
         x: torch.Tensor,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         freqs_cis=None,
+        phase_barrier_fn: Any | None = None,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         query, key, value, encoder_query, encoder_key, encoder_value = (
             _get_qkv_projections(self, x, encoder_hidden_states)
@@ -401,6 +405,8 @@ class FluxAttention(torch.nn.Module, AttentionModuleMixin):
                 ],
                 dim=1,
             )
+            if phase_barrier_fn is not None:
+                phase_barrier_fn()
             if not self.pre_only:
                 x, _ = self.to_out[0](x)
                 if len(self.to_out) == 2:
@@ -409,6 +415,8 @@ class FluxAttention(torch.nn.Module, AttentionModuleMixin):
 
             return x, encoder_hidden_states
         else:
+            if phase_barrier_fn is not None:
+                phase_barrier_fn()
             if not self.pre_only:
                 x, _ = self.to_out[0](x)
                 if len(self.to_out) == 2:
@@ -495,6 +503,8 @@ class FluxSingleTransformerBlock(nn.Module):
         temb: torch.Tensor,
         freqs_cis: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         joint_attention_kwargs: Optional[Dict[str, Any]] = None,
+        block_idx: int | None = None,
+        phase_barrier_fn: Any | None = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         text_seq_len = encoder_hidden_states.shape[1]
         hidden_states = torch.cat([encoder_hidden_states, hidden_states], dim=1)
@@ -516,6 +526,11 @@ class FluxSingleTransformerBlock(nn.Module):
             attn_output = self.attn(
                 x=norm_hidden_states,
                 freqs_cis=freqs_cis,
+                phase_barrier_fn=(
+                    lambda: phase_barrier_fn(block_idx, "tail")
+                    if phase_barrier_fn is not None and block_idx is not None
+                    else None
+                ),
                 **joint_attention_kwargs,
             )
             if isinstance(attn_output, tuple):
@@ -537,6 +552,8 @@ class FluxSingleTransformerBlock(nn.Module):
 
             hidden_states = torch.cat([attn_output, mlp_hidden_states], dim=2)
             gate = gate.unsqueeze(1)
+            if phase_barrier_fn is not None and block_idx is not None:
+                phase_barrier_fn(block_idx, "tail")
             proj_out, _ = self.proj_out(hidden_states)
             hidden_states = gate * proj_out
             hidden_states = residual + hidden_states
@@ -616,6 +633,8 @@ class FluxTransformerBlock(nn.Module):
         temb: torch.Tensor,
         freqs_cis: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         joint_attention_kwargs: Optional[Dict[str, Any]] = None,
+        block_idx: int | None = None,
+        phase_barrier_fn: Any | None = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(
             hidden_states, emb=temb
@@ -631,6 +650,11 @@ class FluxTransformerBlock(nn.Module):
             x=norm_hidden_states,
             encoder_hidden_states=norm_encoder_hidden_states,
             freqs_cis=freqs_cis,
+            phase_barrier_fn=(
+                lambda: phase_barrier_fn(block_idx, "self_attn_tail")
+                if phase_barrier_fn is not None and block_idx is not None
+                else None
+            ),
             **joint_attention_kwargs,
         )
 
@@ -652,6 +676,8 @@ class FluxTransformerBlock(nn.Module):
                 norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
             )
 
+        if phase_barrier_fn is not None and block_idx is not None:
+            phase_barrier_fn(block_idx, "ffn")
         ff_output = self.ff(norm_hidden_states)
         ff_output = gate_mlp.unsqueeze(1) * ff_output
 
@@ -716,6 +742,65 @@ class FluxTransformer2DModel(CachableDiT, OffloadableDiTMixin):
     """
 
     param_names_mapping = FluxConfig().arch_config.param_names_mapping
+    TRANSFORMER_BLOCK_PHASE_SPECS: tuple[PhaseSpec, ...] = (
+        PhaseSpec(
+            name="entry",
+            prefixes=(
+                "norm1",
+                "norm1_context",
+                "attn.to_q",
+                "attn.to_k",
+                "attn.to_v",
+                "attn.to_qkv",
+                "attn.add_q_proj",
+                "attn.add_k_proj",
+                "attn.add_v_proj",
+                "attn.to_added_qkv",
+                "attn.norm_q",
+                "attn.norm_k",
+                "attn.norm_added_q",
+                "attn.norm_added_k",
+            ),
+        ),
+        PhaseSpec(
+            name="self_attn_tail",
+            prefixes=(
+                "attn.to_out",
+                "attn.to_add_out",
+            ),
+        ),
+        PhaseSpec(
+            name="ffn",
+            prefixes=(
+                "ff",
+                "ff_context",
+            ),
+        ),
+    )
+    SINGLE_TRANSFORMER_BLOCK_PHASE_SPECS: tuple[PhaseSpec, ...] = (
+        PhaseSpec(
+            name="entry",
+            prefixes=(
+                "norm",
+                "proj_mlp",
+                "mlp_fc1",
+                "mlp_fc2",
+                "attn.to_q",
+                "attn.to_k",
+                "attn.to_v",
+                "attn.to_qkv",
+                "attn.norm_q",
+                "attn.norm_k",
+            ),
+        ),
+        PhaseSpec(
+            name="tail",
+            prefixes=(
+                "proj_out",
+                "attn.to_out",
+            ),
+        ),
+    )
 
     @classmethod
     def get_nunchaku_quant_rules(cls) -> dict[str, list[str]]:
@@ -827,6 +912,27 @@ class FluxTransformer2DModel(CachableDiT, OffloadableDiTMixin):
             "single_transformer_blocks",
         ]
 
+    def get_offload_phase_specs(self, layer_name: str):
+        if layer_name == "transformer_blocks":
+            return self.TRANSFORMER_BLOCK_PHASE_SPECS
+        if layer_name == "single_transformer_blocks":
+            return self.SINGLE_TRANSFORMER_BLOCK_PHASE_SPECS
+        return super().get_offload_phase_specs(layer_name)
+
+    @torch.compiler.disable
+    def _ensure_transformer_block_phase_ready(
+        self, block_idx: int, phase_name: str
+    ) -> None:
+        self.ensure_offload_phase_ready("transformer_blocks", block_idx, phase_name)
+
+    @torch.compiler.disable
+    def _ensure_single_transformer_block_phase_ready(
+        self, block_idx: int, phase_name: str
+    ) -> None:
+        self.ensure_offload_phase_ready(
+            "single_transformer_blocks", block_idx, phase_name
+        )
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -889,21 +995,25 @@ class FluxTransformer2DModel(CachableDiT, OffloadableDiTMixin):
             ip_hidden_states = self.encoder_hid_proj(ip_adapter_image_embeds)
             joint_attention_kwargs.update({"ip_hidden_states": ip_hidden_states})
 
-        for block in self.transformer_blocks:
+        for block_idx, block in enumerate(self.transformer_blocks):
             encoder_hidden_states, hidden_states = block(
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 temb=temb,
                 freqs_cis=freqs_cis,
                 joint_attention_kwargs=joint_attention_kwargs,
+                block_idx=block_idx,
+                phase_barrier_fn=self._ensure_transformer_block_phase_ready,
             )
-        for block in self.single_transformer_blocks:
+        for block_idx, block in enumerate(self.single_transformer_blocks):
             encoder_hidden_states, hidden_states = block(
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 temb=temb,
                 freqs_cis=freqs_cis,
                 joint_attention_kwargs=joint_attention_kwargs,
+                block_idx=block_idx,
+                phase_barrier_fn=self._ensure_single_transformer_block_phase_ready,
             )
 
         hidden_states = self.norm_out(hidden_states, temb)

@@ -32,7 +32,7 @@ case "$PROFILE_MODEL" in
         NO_NSYS="${NO_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/no_offload_nsys.nsys-rep" "$PROFILES_DIR/no_offload_nsys.nsys-rep")}"
         PHASE_NSYS="${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/phase_offload_nsys.nsys-rep" "$PROFILES_DIR/phase_offload_nsys.nsys-rep")}"
         ;;
-    flux|flux1|flux2|fluximage|flux_image)
+    flux|flux1|flux_1|fluximage|flux_image)
         PROFILE_MODEL="flux"
         MODEL_PROFILES_DIR="${PROFILES_DIR%/}/flux"
         ANALYSIS_DIR="${ANALYSIS_DIR:-$MODEL_PROFILES_DIR/analysis}"
@@ -40,6 +40,15 @@ case "$PROFILE_MODEL" in
         OLD_NSYS="${OLD_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_old_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_old_offload_nsys.nsys-rep")}"
         NO_NSYS="${NO_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_no_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_no_offload_nsys.nsys-rep")}"
         PHASE_NSYS="${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_phase_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_phase_offload_nsys.nsys-rep")}"
+        ;;
+    flux_2|flux2|flux-2|flux2dev|flux_2_dev)
+        PROFILE_MODEL="flux_2"
+        MODEL_PROFILES_DIR="${PROFILES_DIR%/}/flux_2"
+        ANALYSIS_DIR="${ANALYSIS_DIR:-$MODEL_PROFILES_DIR/analysis}"
+        NEW_NSYS="${NEW_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_2_new_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_2_new_offload_nsys.nsys-rep")}"
+        OLD_NSYS="${OLD_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_2_old_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_2_old_offload_nsys.nsys-rep")}"
+        NO_NSYS="${NO_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_2_no_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_2_no_offload_nsys.nsys-rep")}"
+        PHASE_NSYS="${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_2_phase_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_2_phase_offload_nsys.nsys-rep")}"
         ;;
     hunyuan|hunyuanvideo)
         PROFILE_MODEL="hunyuanvideo"
@@ -51,7 +60,7 @@ case "$PROFILE_MODEL" in
         PHASE_NSYS="${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/hunyuanvideo_phase_offload_nsys.nsys-rep" "$PROFILES_DIR/hunyuanvideo_phase_offload_nsys.nsys-rep")}"
         ;;
     *)
-        echo "ERROR: unsupported PROFILE_MODEL='$PROFILE_MODEL'. Supported: wanvideo, flux, hunyuanvideo."
+        echo "ERROR: unsupported PROFILE_MODEL='$PROFILE_MODEL'. Supported: wanvideo, flux, flux_2, hunyuanvideo."
         exit 1
         ;;
 esac

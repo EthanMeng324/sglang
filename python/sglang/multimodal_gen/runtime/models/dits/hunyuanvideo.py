@@ -40,7 +40,10 @@ from sglang.multimodal_gen.runtime.platforms import (
     AttentionBackendEnum,
     current_platform,
 )
-from sglang.multimodal_gen.runtime.utils.layerwise_offload import OffloadableDiTMixin
+from sglang.multimodal_gen.runtime.utils.layerwise_offload import (
+    OffloadableDiTMixin,
+    PhaseSpec,
+)
 
 
 @torch.compiler.disable
@@ -167,6 +170,8 @@ class MMDoubleStreamBlock(nn.Module):
         txt: torch.Tensor,
         vec: torch.Tensor,
         freqs_cis: tuple,
+        block_idx: int | None = None,
+        phase_barrier_fn: Any | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Process modulation vectors
         img_mod_outputs = self.img_mod(vec)
@@ -229,6 +234,8 @@ class MMDoubleStreamBlock(nn.Module):
 
         # Run distributed attention
         img_attn, txt_attn = self.attn(img_q, img_k, img_v, txt_q, txt_k, txt_v)
+        if phase_barrier_fn is not None and block_idx is not None:
+            phase_barrier_fn(block_idx, "self_attn_tail")
         img_attn_out, _ = self.img_attn_proj(
             img_attn.view(batch_size, image_seq_len, -1)
         )
@@ -238,6 +245,8 @@ class MMDoubleStreamBlock(nn.Module):
         )
 
         # Process image MLP
+        if phase_barrier_fn is not None and block_idx is not None:
+            phase_barrier_fn(block_idx, "ffn")
         img_mlp_out = self.img_mlp(img_mlp_input)
         img = self.img_mlp_residual(img_mlp_out, img_mlp_gate, img_residual)
 
@@ -340,6 +349,8 @@ class MMSingleStreamBlock(nn.Module):
         vec: torch.Tensor,
         txt_len: int,
         freqs_cis: tuple[torch.Tensor, torch.Tensor],
+        block_idx: int | None = None,
+        phase_barrier_fn: Any | None = None,
     ) -> torch.Tensor:
         # Process modulation
         mod_shift, mod_scale, mod_gate = self.modulation(vec).chunk(3, dim=-1)
@@ -388,6 +399,8 @@ class MMSingleStreamBlock(nn.Module):
         combined = torch.cat((attn_output, mlp_output), dim=-1)
 
         # Final projection
+        if phase_barrier_fn is not None and block_idx is not None:
+            phase_barrier_fn(block_idx, "tail")
         output, _ = self.linear2(combined)
 
         # Apply residual connection with gating using fused operation
@@ -415,6 +428,60 @@ class HunyuanVideoTransformer3DModel(CachableDiT, OffloadableDiTMixin):
     param_names_mapping = HunyuanVideoConfig().param_names_mapping
     reverse_param_names_mapping = HunyuanVideoConfig().reverse_param_names_mapping
     lora_param_names_mapping = HunyuanVideoConfig().lora_param_names_mapping
+    DOUBLE_BLOCK_PHASE_SPECS: tuple[PhaseSpec, ...] = (
+        PhaseSpec(
+            name="entry",
+            prefixes=(
+                "img_mod",
+                "img_attn_norm",
+                "img_attn_qkv",
+                "img_attn_q_norm",
+                "img_attn_k_norm",
+                "txt_mod",
+                "txt_attn_norm",
+                "txt_attn_qkv",
+                "txt_attn_q_norm",
+                "txt_attn_k_norm",
+            ),
+        ),
+        PhaseSpec(
+            name="self_attn_tail",
+            prefixes=(
+                "img_attn_proj",
+                "txt_attn_proj",
+                "img_attn_residual_mlp_norm",
+                "txt_attn_residual_mlp_norm",
+            ),
+        ),
+        PhaseSpec(
+            name="ffn",
+            prefixes=(
+                "img_mlp",
+                "img_mlp_residual",
+                "txt_mlp",
+                "txt_mlp_residual",
+            ),
+        ),
+    )
+    SINGLE_BLOCK_PHASE_SPECS: tuple[PhaseSpec, ...] = (
+        PhaseSpec(
+            name="entry",
+            prefixes=(
+                "modulation",
+                "input_norm_scale_shift",
+                "linear1",
+                "q_norm",
+                "k_norm",
+            ),
+        ),
+        PhaseSpec(
+            name="tail",
+            prefixes=(
+                "linear2",
+                "output_residual",
+            ),
+        ),
+    )
 
     def __init__(self, config: HunyuanVideoConfig, hf_config: dict[str, Any]):
         super().__init__(config=config, hf_config=hf_config)
@@ -534,6 +601,25 @@ class HunyuanVideoTransformer3DModel(CachableDiT, OffloadableDiTMixin):
 
         self.layer_names = ["double_blocks", "single_blocks"]
 
+    def get_offload_phase_specs(self, layer_name: str):
+        if layer_name == "double_blocks":
+            return self.DOUBLE_BLOCK_PHASE_SPECS
+        if layer_name == "single_blocks":
+            return self.SINGLE_BLOCK_PHASE_SPECS
+        return super().get_offload_phase_specs(layer_name)
+
+    @torch.compiler.disable
+    def _ensure_double_block_phase_ready(
+        self, block_idx: int, phase_name: str
+    ) -> None:
+        self.ensure_offload_phase_ready("double_blocks", block_idx, phase_name)
+
+    @torch.compiler.disable
+    def _ensure_single_block_phase_ready(
+        self, block_idx: int, phase_name: str
+    ) -> None:
+        self.ensure_offload_phase_ready("single_blocks", block_idx, phase_name)
+
     # TODO: change the input the FORWARD_BATCH Dict
     # TODO: change output to a dict
     def forward(
@@ -628,7 +714,11 @@ class HunyuanVideoTransformer3DModel(CachableDiT, OffloadableDiTMixin):
             # Process through double stream blocks
             for index, block in enumerate(self.double_blocks):
                 double_block_args = [img, txt, vec, freqs_cis]
-                img, txt = block(*double_block_args)
+                img, txt = block(
+                    *double_block_args,
+                    block_idx=index,
+                    phase_barrier_fn=self._ensure_double_block_phase_ready,
+                )
             # Merge txt and img to pass through single stream blocks
             x = torch.cat((img, txt), 1)
 
@@ -641,7 +731,11 @@ class HunyuanVideoTransformer3DModel(CachableDiT, OffloadableDiTMixin):
                         txt_seq_len,
                         freqs_cis,
                     ]
-                    x = block(*single_block_args)
+                    x = block(
+                        *single_block_args,
+                        block_idx=index,
+                        phase_barrier_fn=self._ensure_single_block_phase_ready,
+                    )
 
             # Extract image features
             img = x[:, :img_seq_len, ...]

@@ -1243,6 +1243,10 @@ class LayerwiseOffloadManager:
 
         # Warm up initial prefetch window synchronously for first step.
         self.prepare_for_next_req(non_blocking=False)
+        if torch.cuda.is_available() and _env_bool(
+            "SGLANG_OFFLOAD_EMPTY_CACHE_AFTER_INIT", False
+        ):
+            torch.cuda.empty_cache()
 
         self.register_forward_hooks()
         logger.info(

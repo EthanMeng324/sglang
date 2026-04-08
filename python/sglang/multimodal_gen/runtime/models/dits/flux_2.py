@@ -28,12 +28,23 @@ from sglang.multimodal_gen.runtime.layers.rotary_embedding import (
     NDRotaryEmbedding,
     apply_flashinfer_rope_qk_inplace,
 )
+from sglang.multimodal_gen.runtime.managers.forward_context import get_forward_context
 from sglang.multimodal_gen.runtime.models.dits.base import CachableDiT
 from sglang.multimodal_gen.runtime.platforms import current_platform
-from sglang.multimodal_gen.runtime.utils.layerwise_offload import OffloadableDiTMixin
+from sglang.multimodal_gen.runtime.utils.layerwise_offload import (
+    OffloadableDiTMixin,
+    PhaseSpec,
+)
 from sglang.multimodal_gen.runtime.utils.logging_utils import init_logger
 
 logger = init_logger(__name__)  # pylint: disable=invalid-name
+
+
+def _set_forward_context_comm_state(forward_context, tracker, quiesce_fn) -> None:
+    if getattr(forward_context, "comm_activity_tracker", None) is not tracker:
+        forward_context.comm_activity_tracker = tracker
+    if getattr(forward_context, "comm_quiesce_fn", None) is not quiesce_fn:
+        forward_context.comm_quiesce_fn = quiesce_fn
 
 
 def _get_qkv_projections(
@@ -187,6 +198,7 @@ class Flux2Attention(torch.nn.Module, AttentionModuleMixin):
         hidden_states: torch.Tensor,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         freqs_cis: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        phase_barrier_fn: Any | None = None,
     ) -> torch.Tensor:
         query, key, value, encoder_query, encoder_key, encoder_value = (
             _get_qkv_projections(self, hidden_states, encoder_hidden_states)
@@ -249,8 +261,11 @@ class Flux2Attention(torch.nn.Module, AttentionModuleMixin):
                 ],
                 dim=1,
             )
-            encoder_hidden_states, _ = self.to_add_out(encoder_hidden_states)
 
+        if phase_barrier_fn is not None:
+            phase_barrier_fn()
+        if encoder_hidden_states is not None:
+            encoder_hidden_states, _ = self.to_add_out(encoder_hidden_states)
         hidden_states, _ = self.to_out[0](hidden_states)
         hidden_states = self.to_out[1](hidden_states)
 
@@ -335,6 +350,7 @@ class Flux2ParallelSelfAttention(torch.nn.Module, AttentionModuleMixin):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         freqs_cis: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        phase_barrier_fn: Any | None = None,
         **kwargs,
     ) -> torch.Tensor:
         # Parallel in (QKV + MLP in) projection
@@ -376,6 +392,8 @@ class Flux2ParallelSelfAttention(torch.nn.Module, AttentionModuleMixin):
 
         # Concatenate and parallel output projection
         hidden_states = torch.cat([hidden_states, mlp_hidden_states], dim=-1)
+        if phase_barrier_fn is not None:
+            phase_barrier_fn()
         hidden_states, _ = self.to_out(hidden_states)
 
         return hidden_states
@@ -419,6 +437,8 @@ class Flux2SingleTransformerBlock(nn.Module):
         joint_attention_kwargs: Optional[Dict[str, Any]] = None,
         split_hidden_states: bool = False,
         text_seq_len: Optional[int] = None,
+        block_idx: int | None = None,
+        phase_barrier_fn: Any | None = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # If encoder_hidden_states is None, hidden_states is assumed to have encoder_hidden_states already
         # concatenated
@@ -435,6 +455,11 @@ class Flux2SingleTransformerBlock(nn.Module):
         attn_output = self.attn(
             hidden_states=norm_hidden_states,
             freqs_cis=freqs_cis,
+            phase_barrier_fn=(
+                lambda: phase_barrier_fn(block_idx, "tail")
+                if phase_barrier_fn is not None and block_idx is not None
+                else None
+            ),
             **joint_attention_kwargs,
         )
 
@@ -500,6 +525,8 @@ class Flux2TransformerBlock(nn.Module):
         ],
         freqs_cis: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         joint_attention_kwargs: Optional[Dict[str, Any]] = None,
+        block_idx: int | None = None,
+        phase_barrier_fn: Any | None = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         joint_attention_kwargs = joint_attention_kwargs or {}
 
@@ -528,6 +555,11 @@ class Flux2TransformerBlock(nn.Module):
             hidden_states=norm_hidden_states,
             encoder_hidden_states=norm_encoder_hidden_states,
             freqs_cis=freqs_cis,
+            phase_barrier_fn=(
+                lambda: phase_barrier_fn(block_idx, "self_attn_tail")
+                if phase_barrier_fn is not None and block_idx is not None
+                else None
+            ),
             **joint_attention_kwargs,
         )
 
@@ -540,6 +572,8 @@ class Flux2TransformerBlock(nn.Module):
         norm_hidden_states = self.norm2(hidden_states)
         norm_hidden_states = norm_hidden_states * (1 + scale_mlp) + shift_mlp
 
+        if phase_barrier_fn is not None and block_idx is not None:
+            phase_barrier_fn(block_idx, "ffn")
         ff_output = self.ff(norm_hidden_states)
         hidden_states = hidden_states + gate_mlp * ff_output
 
@@ -662,6 +696,51 @@ class Flux2Transformer2DModel(CachableDiT, OffloadableDiTMixin):
     """
 
     param_names_mapping = FluxConfig().arch_config.param_names_mapping
+    TRANSFORMER_BLOCK_PHASE_SPECS: tuple[PhaseSpec, ...] = (
+        PhaseSpec(
+            name="entry",
+            prefixes=(
+                "attn.to_q",
+                "attn.to_k",
+                "attn.to_v",
+                "attn.add_q_proj",
+                "attn.add_k_proj",
+                "attn.add_v_proj",
+                "attn.norm_q",
+                "attn.norm_k",
+                "attn.norm_added_q",
+                "attn.norm_added_k",
+            ),
+        ),
+        PhaseSpec(
+            name="self_attn_tail",
+            prefixes=(
+                "attn.to_out",
+                "attn.to_add_out",
+            ),
+        ),
+        PhaseSpec(
+            name="ffn",
+            prefixes=(
+                "ff",
+                "ff_context",
+            ),
+        ),
+    )
+    SINGLE_TRANSFORMER_BLOCK_PHASE_SPECS: tuple[PhaseSpec, ...] = (
+        PhaseSpec(
+            name="entry",
+            prefixes=(
+                "attn.to_qkv_mlp_proj",
+                "attn.norm_q",
+                "attn.norm_k",
+            ),
+        ),
+        PhaseSpec(
+            name="tail",
+            prefixes=("attn.to_out",),
+        ),
+    )
 
     def __init__(self, config: FluxConfig, hf_config: dict[str, Any]):
         super().__init__(config=config, hf_config=hf_config)
@@ -762,6 +841,27 @@ class Flux2Transformer2DModel(CachableDiT, OffloadableDiTMixin):
 
         self.layer_names = ["transformer_blocks", "single_transformer_blocks"]
 
+    def get_offload_phase_specs(self, layer_name: str):
+        if layer_name == "transformer_blocks":
+            return self.TRANSFORMER_BLOCK_PHASE_SPECS
+        if layer_name == "single_transformer_blocks":
+            return self.SINGLE_TRANSFORMER_BLOCK_PHASE_SPECS
+        return super().get_offload_phase_specs(layer_name)
+
+    @torch.compiler.disable
+    def _ensure_transformer_block_phase_ready(
+        self, block_idx: int, phase_name: str
+    ) -> None:
+        self.ensure_offload_phase_ready("transformer_blocks", block_idx, phase_name)
+
+    @torch.compiler.disable
+    def _ensure_single_transformer_block_phase_ready(
+        self, block_idx: int, phase_name: str
+    ) -> None:
+        self.ensure_offload_phase_ready(
+            "single_transformer_blocks", block_idx, phase_name
+        )
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -787,6 +887,11 @@ class Flux2Transformer2DModel(CachableDiT, OffloadableDiTMixin):
                 [diffusers.models.attention_processor](https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/attention_processor.py).
 
         """
+        forward_context = get_forward_context()
+        tracker = getattr(self, "comm_activity_tracker", None)
+        quiesce_fn = getattr(self, "quiesce_prefetch_for_comm", None)
+        _set_forward_context_comm_state(forward_context, tracker, quiesce_fn)
+
         # 0. Handle input arguments
         if joint_attention_kwargs is not None:
             joint_attention_kwargs = joint_attention_kwargs.copy()
@@ -823,6 +928,8 @@ class Flux2Transformer2DModel(CachableDiT, OffloadableDiTMixin):
                 temb_mod_params_txt=double_stream_mod_txt,
                 freqs_cis=freqs_cis,
                 joint_attention_kwargs=joint_attention_kwargs,
+                block_idx=index_block,
+                phase_barrier_fn=self._ensure_transformer_block_phase_ready,
             )
         # Concatenate text and image streams for single-block inference
         hidden_states = torch.cat([encoder_hidden_states, hidden_states], dim=1)
@@ -835,6 +942,8 @@ class Flux2Transformer2DModel(CachableDiT, OffloadableDiTMixin):
                 temb_mod_params=single_stream_mod,
                 freqs_cis=freqs_cis,
                 joint_attention_kwargs=joint_attention_kwargs,
+                block_idx=index_block,
+                phase_barrier_fn=self._ensure_single_transformer_block_phase_ready,
             )
         # Remove text tokens from concatenated stream
         hidden_states = hidden_states[:, num_txt_tokens:, ...]

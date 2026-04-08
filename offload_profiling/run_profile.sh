@@ -14,11 +14,20 @@ Supported models:
   wanvideo
   hunyuanvideo
   flux
+  flux_2
 
 Notes:
   - A full-resident no-offload dry run is executed first for warmup
   - This wrapper runs: no -> old -> new -> phase -> analyze
-  - For flux, --batch-size maps to --num-outputs-per-prompt and generates multiple images from the same prompt
+  - For flux/flux_2, --batch-size maps to --num-outputs-per-prompt and generates multiple images from the same prompt
+  - Phase resident phases can be overridden with SGLANG_DIT_OFFLOAD_RESIDENT_PHASES=<csv>
+    wanvideo: entry,self_attn_tail,cross_attn,ffn
+    hunyuanvideo:
+      double_blocks -> entry,self_attn_tail,ffn
+      single_blocks -> entry,tail
+    flux / flux_2:
+      transformer_blocks -> entry,self_attn_tail,ffn
+      single_transformer_blocks -> entry,tail
   - Extra settings can still be passed through env vars, e.g. HEIGHT/WIDTH/NUM_GPUS
 EOF
 }
@@ -79,7 +88,7 @@ WARMUP_MASTER_PORT="${WARMUP_MASTER_PORT:-30170}"
 WARMUP_COOLDOWN_SEC="${WARMUP_COOLDOWN_SEC:-5}"
 TIMELINE_LOG_PATH="${TIMELINE_LOG_PATH:-}"
 
-if [[ "$PROFILE_MODEL" == "flux" ]]; then
+if profile_model_is_image; then
     export DIT_CPU_OFFLOAD_OVERRIDE=false
 fi
 
@@ -111,6 +120,7 @@ echo "=========================================="
 echo "Model      : ${PROFILE_MODEL}"
 echo "Num frames : ${NUM_FRAMES_OVERRIDE:-default}"
 echo "Batch size : ${BATCH_SIZE_OVERRIDE:-default}"
+echo "Resident phases : ${SGLANG_DIT_OFFLOAD_RESIDENT_PHASES:-<default>}"
 echo "Start      : $(date)"
 echo ""
 
@@ -156,7 +166,7 @@ run_step_with_env "Warmup Dry Run" "run_access_no.sh" \
 timeline_log "cooldown_start" "warmup" "sleep=${WARMUP_COOLDOWN_SEC}"
 sleep "$WARMUP_COOLDOWN_SEC"
 timeline_log "cooldown_end" "warmup" "sleep=${WARMUP_COOLDOWN_SEC}"
-if [[ "$PROFILE_MODEL" == "flux" ]]; then
+if profile_model_is_image; then
     run_step "No Offload" "run_access_no.sh"
     run_step "Old Offload" "run_access_old.sh"
     run_step "Comm-Aware Offload" "run_access.sh"

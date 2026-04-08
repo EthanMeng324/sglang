@@ -11,6 +11,17 @@ _first_existing_dir() {
     return 1
 }
 
+profile_model_is_image() {
+    case "${PROFILE_MODEL:-}" in
+        flux|flux_2)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 resolve_profile_model() {
     local mode="$1"
     local model_arg="${2:-}"
@@ -29,13 +40,21 @@ resolve_profile_model() {
             || true)}"
             model_path_hint="MODEL_PATH or WANVIDEO_MODEL_PATH"
             ;;
-        flux|flux1|flux2|fluximage|flux_image)
+        flux|flux1|flux_1|fluximage|flux_image)
             PROFILE_MODEL="flux"
             default_model_path="${FLUX_MODEL_PATH:-$(_first_existing_dir \
                 /scratch/user/u.hm347392/model/FLUX.1-dev \
                 /scratch/user/u.hm347392/models/FLUX.1-dev \
             || true)}"
             model_path_hint="MODEL_PATH or FLUX_MODEL_PATH"
+            ;;
+        flux_2|flux2|flux-2|flux2dev|flux_2_dev)
+            PROFILE_MODEL="flux_2"
+            default_model_path="${FLUX_2_MODEL_PATH:-$(_first_existing_dir \
+                /scratch/user/u.hm347392/model/FLUX.2-klein-4B \
+                /scratch/user/u.hm347392/models/FLUX.2-klein-4B \
+            || true)}"
+            model_path_hint="MODEL_PATH or FLUX_2_MODEL_PATH"
             ;;
         hunyuan|hunyuanvideo)
             PROFILE_MODEL="hunyuanvideo"
@@ -46,7 +65,7 @@ resolve_profile_model() {
             model_path_hint="MODEL_PATH or HUNYUANVIDEO_MODEL_PATH"
             ;;
         *)
-            echo "ERROR: unsupported PROFILE_MODEL='$PROFILE_MODEL'. Supported: wanvideo, flux, hunyuanvideo."
+            echo "ERROR: unsupported PROFILE_MODEL='$PROFILE_MODEL'. Supported: wanvideo, flux, flux_2, hunyuanvideo."
             return 1
             ;;
     esac
@@ -72,7 +91,7 @@ resolve_profile_model() {
     esac
 
     MEDIA_EXT="mp4"
-    if [[ "$PROFILE_MODEL" == "flux" ]]; then
+    if profile_model_is_image; then
         MEDIA_EXT="png"
     fi
 
@@ -99,7 +118,7 @@ apply_profile_model_defaults() {
     BATCH_SIZE="${BATCH_SIZE:-$NUM_OUTPUTS_PER_PROMPT}"
 
     case "$PROFILE_MODEL" in
-        flux)
+        flux|flux_2)
             NUM_FRAMES="${NUM_FRAMES:-1}"
             HEIGHT="${HEIGHT:-1024}"
             WIDTH="${WIDTH:-1024}"
