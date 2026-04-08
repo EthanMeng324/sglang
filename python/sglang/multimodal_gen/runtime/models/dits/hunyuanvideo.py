@@ -448,14 +448,14 @@ class HunyuanVideoTransformer3DModel(CachableDiT, OffloadableDiTMixin):
             name="self_attn_tail",
             prefixes=(
                 "img_attn_proj",
-                "txt_attn_proj",
                 "img_attn_residual_mlp_norm",
-                "txt_attn_residual_mlp_norm",
             ),
         ),
         PhaseSpec(
             name="ffn",
             prefixes=(
+                "txt_attn_proj",
+                "txt_attn_residual_mlp_norm",
                 "img_mlp",
                 "img_mlp_residual",
                 "txt_mlp",
