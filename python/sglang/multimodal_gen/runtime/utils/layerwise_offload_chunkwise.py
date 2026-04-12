@@ -412,6 +412,13 @@ class LayerwiseOffloadManager:
     def _phase_prefetch_bytes(self, layer_idx: int, phase_idx: int) -> int:
         return int(self._phase_total_bytes.get(layer_idx, {}).get(phase_idx, 0))
 
+    def _initial_entry_target_phase_idx(self) -> int:
+        if not self.phase_specs:
+            return 0
+        if not self._coarse_phase_specs:
+            return 0
+        return int(self.phase_name_to_idx.get(self._coarse_phase_specs[0].name, 0))
+
     def _phase_is_resident(self, phase_idx: int) -> bool:
         return phase_idx in self._resident_phase_ids
 
@@ -1798,9 +1805,10 @@ class LayerwiseOffloadManager:
                     # Keep this async to avoid main-thread prefetch catch-up.
                     self.prepare_for_next_req(non_blocking=True)
 
+                entry_target_phase_idx = self._initial_entry_target_phase_idx()
                 step_idx = self._current_profile_step_idx()
                 waited_bytes, total_bytes = self._estimate_waited_prefetch_bytes(
-                    i, 0
+                    i, entry_target_phase_idx
                 )
                 self._record_waited_prefetch_bytes(
                     step_idx, waited_bytes, total_bytes
@@ -1810,7 +1818,7 @@ class LayerwiseOffloadManager:
                 # Start async prefetch as early as possible in pre-hook.
                 self.prefetch_layer(i, non_blocking=True)
                 self._schedule_prefetch_window(i)
-                self._ensure_phase_ready(i, target_phase_idx=0)
+                self._ensure_phase_ready(i, target_phase_idx=entry_target_phase_idx)
                 self._record_prefetch_cp_wait_end(step_idx, i, wait_start)
 
             return hook
