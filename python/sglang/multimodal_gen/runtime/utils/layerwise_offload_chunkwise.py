@@ -139,6 +139,8 @@ class LayerwiseOffloadManager:
         self._layer_total_bytes: Dict[int, int] = {}
         # layer_idx -> {phase_idx: phase_prefetch_bytes}
         self._phase_total_bytes: Dict[int, Dict[int, int]] = {}
+        # layer_idx -> {phase_idx: resident_bytes_kept_on_gpu}
+        self._resident_phase_total_bytes: Dict[int, Dict[int, int]] = {}
         # layer_idx -> {name: {dtype, phase_id, offset, numel, shape, resident}}
         self._weight_metadata: Dict[int, Dict[str, Dict[str, Any]]] = {}
 
@@ -518,7 +520,7 @@ class LayerwiseOffloadManager:
 
         resident_phase_bytes = 0
         if self._resident_phase_ids:
-            for phase_bytes_by_idx in self._phase_total_bytes.values():
+            for phase_bytes_by_idx in self._resident_phase_total_bytes.values():
                 for phase_idx, phase_bytes in phase_bytes_by_idx.items():
                     if phase_idx in self._resident_phase_ids:
                         resident_phase_bytes += int(phase_bytes)
@@ -1195,6 +1197,9 @@ class LayerwiseOffloadManager:
             self._phase_total_bytes[layer_idx] = {
                 phase_idx: 0 for phase_idx in range(len(self.phase_specs))
             }
+            self._resident_phase_total_bytes[layer_idx] = {
+                phase_idx: 0 for phase_idx in range(len(self.phase_specs))
+            }
 
             for phase_idx, dtype_to_params in phase_to_dtype_params.items():
                 self._consolidated_cpu_weights[layer_idx][phase_idx] = {}
@@ -1203,7 +1208,11 @@ class LayerwiseOffloadManager:
                 for dtype, weights in dtype_to_params.items():
                     total_numel = sum(t.numel() for _, t in weights)
                     phase_bytes = int(total_numel * weights[0][1].element_size())
-                    if not resident_phase:
+                    if resident_phase:
+                        self._resident_phase_total_bytes[layer_idx][phase_idx] += (
+                            phase_bytes
+                        )
+                    else:
                         self._layer_total_bytes[layer_idx] += phase_bytes
                         self._phase_total_bytes[layer_idx][phase_idx] += phase_bytes
 
@@ -1240,6 +1249,36 @@ class LayerwiseOffloadManager:
                 if self._layer_complete_locked(layer_idx):
                     self._gpu_layers.add(layer_idx)
                 self._phase_frontiers[layer_idx] = 0
+
+        phase_bytes_summary: Dict[str, int] = {
+            spec.name: 0 for spec in self.phase_specs
+        }
+        resident_phase_bytes_summary: Dict[str, int] = {
+            spec.name: 0 for spec in self.phase_specs
+        }
+        for layer_phase_bytes in self._phase_total_bytes.values():
+            for phase_idx, phase_bytes in layer_phase_bytes.items():
+                phase_bytes_summary[self.phase_specs[phase_idx].name] += int(phase_bytes)
+        for layer_phase_bytes in self._resident_phase_total_bytes.values():
+            for phase_idx, phase_bytes in layer_phase_bytes.items():
+                resident_phase_bytes_summary[self.phase_specs[phase_idx].name] += int(
+                    phase_bytes
+                )
+
+        logger.info(
+            "Layerwise offload phase bytes for %s: pageable=%s resident=%s",
+            self.layers_attr_str,
+            {
+                name: round(phase_bytes_summary[name] / (1024**3), 3)
+                for name in phase_bytes_summary
+                if phase_bytes_summary[name] > 0
+            },
+            {
+                name: round(resident_phase_bytes_summary[name] / (1024**3), 3)
+                for name in resident_phase_bytes_summary
+                if resident_phase_bytes_summary[name] > 0
+            },
+        )
 
         # Warm up initial prefetch window synchronously for first step.
         self.prepare_for_next_req(non_blocking=False)
