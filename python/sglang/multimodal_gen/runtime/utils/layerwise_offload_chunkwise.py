@@ -5,6 +5,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import chain
+from math import ceil, floor
 from typing import Any, Dict, Iterable, List, Sequence, Set, Tuple
 
 import torch
@@ -51,6 +52,16 @@ def _env_str(name: str, default: str = "") -> str:
     return v
 
 
+def _env_float_or_none(name: str, default: float | None = None) -> float | None:
+    v = os.getenv(name)
+    if v is None or not v.strip():
+        return default
+    try:
+        return float(v)
+    except Exception:
+        return default
+
+
 def _parse_phase_name_csv(raw: str | None) -> Set[str]:
     if raw is None:
         return set()
@@ -88,6 +99,8 @@ class LayerwiseOffloadManager:
         phase_specs: Sequence[PhaseSpec] | None = None,
         phase_prefetch_depth: int = 4,
         resident_phase_names: Set[str] | None = None,
+        resident_phase_ratio: float | None = None,
+        phase_prefetch_ratio: float | None = None,
         submodule_granularity: bool = True,
     ) -> None:
         self.model = model
@@ -99,23 +112,30 @@ class LayerwiseOffloadManager:
         self.comm_patch_torch_distributed = comm_patch_torch_distributed
         self.prefetch_chunk_size_bytes = max(1, prefetch_chunk_size_mb) * 1024 * 1024
         self.submodule_granularity = submodule_granularity
-        self.phase_specs: Tuple[PhaseSpec, ...] = tuple(
+        self._coarse_phase_specs: Tuple[PhaseSpec, ...] = tuple(
             phase_specs or (PhaseSpec(name="layer", prefixes=("",)),)
         )
+        self.phase_specs: Tuple[PhaseSpec, ...] = self._coarse_phase_specs
         self.phase_prefetch_depth = min(
             max(1, phase_prefetch_depth), len(self.phase_specs)
+        )
+        self.phase_prefetch_ratio = phase_prefetch_ratio
+        self._auto_bucket_phases = (
+            resident_phase_ratio is not None or phase_prefetch_ratio is not None
         )
         self.phase_name_to_idx = {
             spec.name: phase_idx for phase_idx, spec in enumerate(self.phase_specs)
         }
+        self._requested_resident_phase_names = set(resident_phase_names or set())
         self.resident_phase_names = {
-            name
-            for name in (resident_phase_names or set())
-            if name in self.phase_name_to_idx
+            name for name in self._requested_resident_phase_names if name in self.phase_name_to_idx
         }
+        self.resident_phase_ratio = resident_phase_ratio
         self._resident_phase_ids = {
             self.phase_name_to_idx[name] for name in self.resident_phase_names
         }
+        self._relative_name_to_phase_idx: Dict[str, int] = {}
+        self._coarse_phase_name_to_phase_ids: Dict[str, Set[int]] = {}
         self.enabled = bool(enabled and torch.cuda.is_available())
 
         self.comm_tracker: CommunicationActivityTracker | None = None
@@ -206,6 +226,150 @@ class LayerwiseOffloadManager:
 
         self._initialize()
 
+    def _quantized_target_bytes(self, total_bytes: int, ratio: float) -> int:
+        if total_bytes <= 0:
+            return 0
+        total_chunks = max(1, ceil(total_bytes / self.prefetch_chunk_size_bytes))
+        target_chunks = int(floor(total_chunks * ratio + 0.5))
+        target_chunks = min(max(0, target_chunks), total_chunks)
+        return int(target_chunks * self.prefetch_chunk_size_bytes)
+
+    def _derive_phase_prefix_by_ratio(
+        self, phase_bytes: Dict[int, int], ratio: float
+    ) -> Set[int]:
+        total_bytes = sum(max(0, int(v)) for v in phase_bytes.values())
+        if total_bytes <= 0 or ratio <= 0:
+            return set()
+        if ratio >= 1:
+            return set(range(len(self.phase_specs)))
+
+        target_bytes = self._quantized_target_bytes(total_bytes, ratio)
+        if target_bytes <= 0:
+            return set()
+
+        prefix: Set[int] = set()
+        cumulative = 0
+        for phase_idx in range(len(self.phase_specs)):
+            prefix.add(phase_idx)
+            cumulative += max(0, int(phase_bytes.get(phase_idx, 0)))
+            if cumulative >= target_bytes:
+                break
+        return prefix
+
+    def _apply_ratio_based_phase_policy(
+        self, aggregated_phase_bytes: Dict[int, int]
+    ) -> None:
+        if self.resident_phase_ratio is not None:
+            ratio_phase_ids = self._derive_phase_prefix_by_ratio(
+                aggregated_phase_bytes, self.resident_phase_ratio
+            )
+            self._resident_phase_ids |= ratio_phase_ids
+            self.resident_phase_names = {
+                self.phase_specs[idx].name for idx in sorted(self._resident_phase_ids)
+            }
+
+        if self.phase_prefetch_ratio is not None:
+            ratio_phase_ids = self._derive_phase_prefix_by_ratio(
+                aggregated_phase_bytes, self.phase_prefetch_ratio
+            )
+            if ratio_phase_ids:
+                self.phase_prefetch_depth = max(ratio_phase_ids) + 1
+            else:
+                self.phase_prefetch_depth = 1
+
+    def _build_effective_bucket_phases(
+        self,
+        ordered_relative_tensors: Dict[int, List[Tuple[str, int, int]]],
+    ) -> None:
+        if not self._auto_bucket_phases or not ordered_relative_tensors:
+            return
+
+        template_layer_idx = min(ordered_relative_tensors)
+        template_tensors = ordered_relative_tensors[template_layer_idx]
+        tensors_by_coarse_phase: Dict[int, List[Tuple[str, int]]] = {
+            phase_idx: [] for phase_idx in range(len(self._coarse_phase_specs))
+        }
+        for relative_name, tensor_bytes, coarse_phase_idx in template_tensors:
+            tensors_by_coarse_phase.setdefault(coarse_phase_idx, []).append(
+                (relative_name, tensor_bytes)
+            )
+
+        effective_phase_specs: List[PhaseSpec] = []
+        barrier_phase_name_to_idx: Dict[str, int] = {}
+        coarse_phase_name_to_phase_ids: Dict[str, Set[int]] = {}
+        relative_name_to_phase_idx: Dict[str, int] = {}
+
+        def emit_bucket(
+            coarse_name: str, bucket_idx: int, bucket_relative_names: List[str]
+        ) -> None:
+            effective_idx = len(effective_phase_specs)
+            effective_name = (
+                coarse_name if bucket_idx == 0 and len(bucket_relative_names) == 1 else f"{coarse_name}@{bucket_idx}"
+            )
+            effective_phase_specs.append(
+                PhaseSpec(name=effective_name, prefixes=tuple(bucket_relative_names))
+            )
+            for relative_name in bucket_relative_names:
+                relative_name_to_phase_idx[relative_name] = effective_idx
+            coarse_phase_name_to_phase_ids.setdefault(coarse_name, set()).add(
+                effective_idx
+            )
+            barrier_phase_name_to_idx[coarse_name] = effective_idx
+
+        for coarse_phase_idx, coarse_spec in enumerate(self._coarse_phase_specs):
+            bucket_relative_names: List[str] = []
+            bucket_bytes = 0
+            bucket_idx = 0
+            tensors = tensors_by_coarse_phase.get(coarse_phase_idx, [])
+            for relative_name, tensor_bytes in tensors:
+                if (
+                    bucket_relative_names
+                    and bucket_bytes + tensor_bytes > self.prefetch_chunk_size_bytes
+                ):
+                    emit_bucket(coarse_spec.name, bucket_idx, bucket_relative_names)
+                    bucket_relative_names = []
+                    bucket_bytes = 0
+                    bucket_idx += 1
+                bucket_relative_names.append(relative_name)
+                bucket_bytes += tensor_bytes
+            if bucket_relative_names:
+                emit_bucket(coarse_spec.name, bucket_idx, bucket_relative_names)
+
+        if not effective_phase_specs:
+            return
+
+        self.phase_specs = tuple(effective_phase_specs)
+        self._relative_name_to_phase_idx = relative_name_to_phase_idx
+        self._coarse_phase_name_to_phase_ids = coarse_phase_name_to_phase_ids
+        self.phase_name_to_idx = {
+            spec.name: phase_idx for phase_idx, spec in enumerate(self.phase_specs)
+        }
+        self.phase_name_to_idx.update(barrier_phase_name_to_idx)
+        self.phase_prefetch_depth = min(
+            max(1, self.phase_prefetch_depth), len(self.phase_specs)
+        )
+        logger.info(
+            "Layerwise offload auto-bucketed phases for %s: coarse=%d effective=%d",
+            self.layers_attr_str,
+            len(self._coarse_phase_specs),
+            len(self.phase_specs),
+        )
+
+        resolved_resident_phase_ids: Set[int] = set()
+        resolved_resident_phase_names: Set[str] = set()
+        for name in self._requested_resident_phase_names:
+            phase_ids = self._coarse_phase_name_to_phase_ids.get(name)
+            if phase_ids:
+                resolved_resident_phase_ids |= phase_ids
+                resolved_resident_phase_names.add(name)
+                continue
+            direct_idx = self.phase_name_to_idx.get(name)
+            if direct_idx is not None:
+                resolved_resident_phase_ids.add(direct_idx)
+                resolved_resident_phase_names.add(name)
+        self._resident_phase_ids = resolved_resident_phase_ids
+        self.resident_phase_names = resolved_resident_phase_names
+
     def _match_layer_idx(self, name: str) -> int | None:
         m = self._layer_name_re.search(name)
         if not m:
@@ -223,20 +387,24 @@ class LayerwiseOffloadManager:
 
     def _match_phase_idx(self, name: str) -> int:
         relative_name = self._relative_name_after_layer(name) or ""
-        for phase_idx, spec in enumerate(self.phase_specs):
+        overridden_phase_idx = self._relative_name_to_phase_idx.get(relative_name)
+        if overridden_phase_idx is not None:
+            return overridden_phase_idx
+
+        for phase_idx, spec in enumerate(self._coarse_phase_specs):
             for prefix in spec.prefixes:
                 if not prefix:
                     return phase_idx
                 if relative_name == prefix or relative_name.startswith(prefix + "."):
                     return phase_idx
 
-        fallback_idx = len(self.phase_specs) - 1
+        fallback_idx = len(self._coarse_phase_specs) - 1
         if relative_name not in self._unmatched_phase_suffixes:
             self._unmatched_phase_suffixes.add(relative_name)
             logger.warning(
                 "Offload phase matcher for %s fell back to phase %s on tensor %s.",
                 self.layers_attr_str,
-                self.phase_specs[fallback_idx].name,
+                self._coarse_phase_specs[fallback_idx].name,
                 relative_name,
             )
         return fallback_idx
@@ -583,8 +751,11 @@ class LayerwiseOffloadManager:
             "layers_attr_str": self.layers_attr_str,
             "num_layers": self.num_layers,
             "prefetch_size": self.prefetch_size,
+            "phase_prefetch_depth": self.phase_prefetch_depth,
+            "phase_prefetch_ratio": self.phase_prefetch_ratio,
             "phase_names": [spec.name for spec in self.phase_specs],
             "resident_phase_names": sorted(self.resident_phase_names),
+            "resident_phase_ratio": self.resident_phase_ratio,
             "step_state_begin": self._state_records_to_series(
                 self._runtime_state_begin
             ),
@@ -1179,7 +1350,29 @@ class LayerwiseOffloadManager:
         layer_groups: Dict[
             int, Dict[int, Dict[torch.dtype, List[Tuple[str, torch.Tensor]]]]
         ] = {}
-        all_tensors = chain(self._named_parameters.items(), self._named_buffers.items())
+        ordered_relative_tensors: Dict[int, List[Tuple[str, int, int]]] = {}
+        all_tensors = list(
+            chain(self._named_parameters.items(), self._named_buffers.items())
+        )
+        for name, tensor in all_tensors:
+            layer_idx = self._match_layer_idx(name)
+            if layer_idx is None or layer_idx >= self.num_layers:
+                continue
+            relative_name = self._relative_name_after_layer(name) or ""
+            phase_idx = self._match_phase_idx(name)
+            ordered_relative_tensors.setdefault(layer_idx, []).append(
+                (relative_name, int(tensor.numel() * tensor.element_size()), phase_idx)
+            )
+            layer_groups.setdefault(layer_idx, {}).setdefault(phase_idx, {}).setdefault(
+                tensor.dtype, []
+            ).append((name, tensor))
+
+        self._build_effective_bucket_phases(ordered_relative_tensors)
+
+        layer_groups = {}
+        aggregated_phase_bytes: Dict[int, int] = {
+            phase_idx: 0 for phase_idx in range(len(self.phase_specs))
+        }
         for name, tensor in all_tensors:
             layer_idx = self._match_layer_idx(name)
             if layer_idx is None or layer_idx >= self.num_layers:
@@ -1188,6 +1381,9 @@ class LayerwiseOffloadManager:
             layer_groups.setdefault(layer_idx, {}).setdefault(phase_idx, {}).setdefault(
                 tensor.dtype, []
             ).append((name, tensor))
+            aggregated_phase_bytes[phase_idx] += int(tensor.numel() * tensor.element_size())
+
+        self._apply_ratio_based_phase_policy(aggregated_phase_bytes)
 
         # 2. concat and offload (in pinned memory)
         for layer_idx, phase_to_dtype_params in layer_groups.items():
@@ -1279,6 +1475,14 @@ class LayerwiseOffloadManager:
                 if resident_phase_bytes_summary[name] > 0
             },
         )
+        if self.phase_prefetch_ratio is not None:
+            logger.info(
+                "Layerwise offload phase-prefetch ratio for %s: ratio=%.3f -> depth=%d phases=%s",
+                self.layers_attr_str,
+                self.phase_prefetch_ratio,
+                self.phase_prefetch_depth,
+                [spec.name for spec in self.phase_specs[: self.phase_prefetch_depth]],
+            )
 
         # Warm up initial prefetch window synchronously for first step.
         self.prepare_for_next_req(non_blocking=False)
@@ -1686,17 +1890,35 @@ class OffloadableDiTMixin:
             "SGLANG_DIT_OFFLOAD_PHASE_PREFETCH_DEPTH",
             phase_prefetch_depth,
         )
+        resident_phase_ratio = _env_float_or_none(
+            "SGLANG_DIT_OFFLOAD_RESIDENT_RATIO",
+            getattr(server_args, "dit_offload_resident_ratio", None),
+        )
+        phase_prefetch_ratio = _env_float_or_none(
+            "SGLANG_DIT_OFFLOAD_PHASE_PREFETCH_RATIO",
+            getattr(server_args, "dit_offload_phase_prefetch_ratio", None),
+        )
+        if resident_phase_ratio is not None:
+            resident_phase_ratio = min(max(resident_phase_ratio, 0.0), 1.0)
+        if phase_prefetch_ratio is not None:
+            phase_prefetch_ratio = min(max(phase_prefetch_ratio, 1.0), 1.0)
         resident_phase_names = _parse_phase_name_csv(
             getattr(server_args, "dit_offload_resident_phases", "")
         )
         resident_phase_names |= _parse_phase_name_csv(
             _env_str("SGLANG_DIT_OFFLOAD_RESIDENT_PHASES", "")
         )
-        if resident_phase_names and not phase_aware:
+        if (
+            resident_phase_names
+            or resident_phase_ratio is not None
+            or phase_prefetch_ratio is not None
+        ) and not phase_aware:
             logger.info(
-                "Ignoring resident phase config because SGLANG_DIT_PHASE_AWARE_PREFETCH is disabled."
+                "Ignoring phase-aware resident/prefetch ratio config because SGLANG_DIT_PHASE_AWARE_PREFETCH is disabled."
             )
             resident_phase_names = set()
+            resident_phase_ratio = None
+            phase_prefetch_ratio = None
 
         for layer_name in self.layer_names:
             module_list = getattr(self, layer_name, None)
@@ -1727,6 +1949,8 @@ class OffloadableDiTMixin:
                 phase_specs=phase_specs,
                 phase_prefetch_depth=phase_prefetch_depth,
                 resident_phase_names=resident_phase_names,
+                resident_phase_ratio=resident_phase_ratio,
+                phase_prefetch_ratio=phase_prefetch_ratio,
                 submodule_granularity=True,
             )
             self.layerwise_offload_managers.append(manager)
@@ -1748,6 +1972,16 @@ class OffloadableDiTMixin:
             logger.info(
                 "Layerwise offload resident phases requested: %s",
                 sorted(resident_phase_names),
+            )
+        if resident_phase_ratio is not None:
+            logger.info(
+                "Layerwise offload resident ratio requested: %.3f",
+                resident_phase_ratio,
+            )
+        if phase_prefetch_ratio is not None:
+            logger.info(
+                "Layerwise offload phase-prefetch ratio requested: %.3f",
+                phase_prefetch_ratio,
             )
 
     @property

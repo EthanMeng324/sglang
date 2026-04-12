@@ -21,6 +21,8 @@ Notes:
   - This wrapper runs: no -> old -> new -> phase -> analyze
   - For flux/flux_2, --batch-size maps to --num-outputs-per-prompt and generates multiple images from the same prompt
   - Phase resident phases can be overridden with SGLANG_DIT_OFFLOAD_RESIDENT_PHASES=<csv>
+  - Phase resident bytes can also be requested with SGLANG_DIT_OFFLOAD_RESIDENT_RATIO=<0..1>
+  - Phase prefetch lookahead can also be requested with SGLANG_DIT_OFFLOAD_PHASE_PREFETCH_RATIO=<0..1>
     wanvideo: entry,self_attn_tail,cross_attn,ffn
     hunyuanvideo:
       double_blocks -> entry,self_attn_tail,ffn
@@ -121,6 +123,8 @@ echo "Model      : ${PROFILE_MODEL}"
 echo "Num frames : ${NUM_FRAMES_OVERRIDE:-default}"
 echo "Batch size : ${BATCH_SIZE_OVERRIDE:-default}"
 echo "Resident phases : ${SGLANG_DIT_OFFLOAD_RESIDENT_PHASES:-<default>}"
+echo "Resident ratio  : ${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO:-<default>}"
+echo "Prefetch ratio  : ${SGLANG_DIT_OFFLOAD_PHASE_PREFETCH_RATIO:-<default>}"
 echo "Start      : $(date)"
 echo ""
 
