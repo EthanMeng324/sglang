@@ -23,6 +23,7 @@ Notes:
   - Phase resident phases can be overridden with SGLANG_DIT_OFFLOAD_RESIDENT_PHASES=<csv>
   - Phase resident bytes can also be requested with SGLANG_DIT_OFFLOAD_RESIDENT_RATIO=<0..1>
   - Phase prefetch lookahead can also be requested with SGLANG_DIT_OFFLOAD_PHASE_PREFETCH_RATIO=<0..1>
+    default in profiling phase mode: 1.0 (unless ratio/depth is explicitly overridden)
     wanvideo: entry,self_attn_tail,cross_attn,ffn
     hunyuanvideo:
       double_blocks -> entry,self_attn_tail,ffn
@@ -92,6 +93,10 @@ TIMELINE_LOG_PATH="${TIMELINE_LOG_PATH:-}"
 
 if profile_model_is_image; then
     export DIT_CPU_OFFLOAD_OVERRIDE=false
+fi
+
+if [[ -z "${SGLANG_DIT_OFFLOAD_PHASE_PREFETCH_RATIO+x}" && -z "${SGLANG_DIT_OFFLOAD_PHASE_PREFETCH_DEPTH+x}" ]]; then
+    export SGLANG_DIT_OFFLOAD_PHASE_PREFETCH_RATIO=1.0
 fi
 
 timeline_log() {

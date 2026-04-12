@@ -1901,7 +1901,7 @@ class OffloadableDiTMixin:
         if resident_phase_ratio is not None:
             resident_phase_ratio = min(max(resident_phase_ratio, 0.0), 1.0)
         if phase_prefetch_ratio is not None:
-            phase_prefetch_ratio = min(max(phase_prefetch_ratio, 1.0), 1.0)
+            phase_prefetch_ratio = min(max(phase_prefetch_ratio, 0.0), 1.0)
         resident_phase_names = _parse_phase_name_csv(
             getattr(server_args, "dit_offload_resident_phases", "")
         )
