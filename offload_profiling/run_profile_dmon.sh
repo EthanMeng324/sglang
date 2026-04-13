@@ -37,8 +37,6 @@ Optional env vars:
   BATCH_SIZE / NUM_OUTPUTS_PER_PROMPT  Number of outputs per prompt (useful for flux/flux_2)
   SGLANG_DIT_OFFLOAD_RESIDENT_PHASES
   SGLANG_DIT_OFFLOAD_RESIDENT_RATIO
-  SGLANG_DIT_OFFLOAD_PHASE_PREFETCH_RATIO
-    default in profiling phase mode: 1.0 (unless ratio/depth is explicitly overridden)
     wanvideo: entry,self_attn_tail,cross_attn,ffn
     hunyuanvideo: double_blocks -> entry,self_attn_tail,ffn; single_blocks -> entry,tail
     flux / flux_2: transformer_blocks -> entry,self_attn_tail,ffn; single_transformer_blocks -> entry,tail

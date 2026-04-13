@@ -100,7 +100,6 @@ class LayerwiseOffloadManager:
         phase_prefetch_depth: int = 4,
         resident_phase_names: Set[str] | None = None,
         resident_phase_ratio: float | None = None,
-        phase_prefetch_ratio: float | None = None,
         submodule_granularity: bool = True,
     ) -> None:
         self.model = model
@@ -119,10 +118,7 @@ class LayerwiseOffloadManager:
         self.phase_prefetch_depth = min(
             max(1, phase_prefetch_depth), len(self.phase_specs)
         )
-        self.phase_prefetch_ratio = phase_prefetch_ratio
-        self._auto_bucket_phases = (
-            resident_phase_ratio is not None or phase_prefetch_ratio is not None
-        )
+        self._auto_bucket_phases = resident_phase_ratio is not None
         self.phase_name_to_idx = {
             spec.name: phase_idx for phase_idx, spec in enumerate(self.phase_specs)
         }
@@ -275,15 +271,6 @@ class LayerwiseOffloadManager:
                 self.phase_specs[idx].name for idx in sorted(self._resident_phase_ids)
             }
 
-        if self.phase_prefetch_ratio is not None:
-            ratio_phase_ids = self._derive_phase_prefix_by_ratio(
-                aggregated_phase_bytes, self.phase_prefetch_ratio
-            )
-            if ratio_phase_ids:
-                self.phase_prefetch_depth = max(ratio_phase_ids) + 1
-            else:
-                self.phase_prefetch_depth = 1
-
     def _build_effective_bucket_phases(
         self,
         ordered_relative_tensors: Dict[int, List[Tuple[str, int, int]]],
@@ -355,9 +342,10 @@ class LayerwiseOffloadManager:
             if not phase_ids:
                 continue
             self._phase_name_to_span[coarse_name] = (min(phase_ids), max(phase_ids))
-        self.phase_prefetch_depth = min(
-            max(1, self.phase_prefetch_depth), len(self.phase_specs)
-        )
+        # Resident-ratio mode should not alter next-layer prefetch semantics:
+        # keep prefetch at a whole future layer, just with finer-grained
+        # resident accounting inside the current layer.
+        self.phase_prefetch_depth = len(self.phase_specs)
         logger.info(
             "Layerwise offload auto-bucketed phases for %s: coarse=%d effective=%d",
             self.layers_attr_str,
@@ -796,7 +784,6 @@ class LayerwiseOffloadManager:
             "num_layers": self.num_layers,
             "prefetch_size": self.prefetch_size,
             "phase_prefetch_depth": self.phase_prefetch_depth,
-            "phase_prefetch_ratio": self.phase_prefetch_ratio,
             "phase_names": [spec.name for spec in self.phase_specs],
             "resident_phase_names": sorted(self.resident_phase_names),
             "resident_phase_ratio": self.resident_phase_ratio,
@@ -1532,14 +1519,6 @@ class LayerwiseOffloadManager:
                 if resident_phase_bytes_summary[name] > 0
             },
         )
-        if self.phase_prefetch_ratio is not None:
-            logger.info(
-                "Layerwise offload phase-prefetch ratio for %s: ratio=%.3f -> depth=%d phases=%s",
-                self.layers_attr_str,
-                self.phase_prefetch_ratio,
-                self.phase_prefetch_depth,
-                [spec.name for spec in self.phase_specs[: self.phase_prefetch_depth]],
-            )
 
         # Warm up initial prefetch window synchronously for first step.
         self.prepare_for_next_req(non_blocking=False)
@@ -1963,14 +1942,23 @@ class OffloadableDiTMixin:
             "SGLANG_DIT_OFFLOAD_RESIDENT_RATIO",
             getattr(server_args, "dit_offload_resident_ratio", None),
         )
-        phase_prefetch_ratio = _env_float_or_none(
-            "SGLANG_DIT_OFFLOAD_PHASE_PREFETCH_RATIO",
-            getattr(server_args, "dit_offload_phase_prefetch_ratio", None),
-        )
         if resident_phase_ratio is not None:
             resident_phase_ratio = min(max(resident_phase_ratio, 0.0), 1.0)
-        if phase_prefetch_ratio is not None:
-            phase_prefetch_ratio = min(max(phase_prefetch_ratio, 0.0), 1.0)
+            if resident_phase_ratio == 0.0:
+                resident_phase_ratio = None
+        deprecated_phase_prefetch_ratio = _env_str(
+            "SGLANG_DIT_OFFLOAD_PHASE_PREFETCH_RATIO", ""
+        )
+        if (
+            deprecated_phase_prefetch_ratio
+            or getattr(server_args, "dit_offload_phase_prefetch_ratio", None)
+            is not None
+        ):
+            logger.warning(
+                "SGLANG_DIT_OFFLOAD_PHASE_PREFETCH_RATIO / --dit-offload-phase-prefetch-ratio "
+                "is deprecated and ignored. Phase-aware prefetch now keeps whole-layer "
+                "next-layer prefetch semantics; only resident ratio remains active."
+            )
         resident_phase_names = _parse_phase_name_csv(
             getattr(server_args, "dit_offload_resident_phases", "")
         )
@@ -1980,14 +1968,12 @@ class OffloadableDiTMixin:
         if (
             resident_phase_names
             or resident_phase_ratio is not None
-            or phase_prefetch_ratio is not None
         ) and not phase_aware:
             logger.info(
                 "Ignoring phase-aware resident/prefetch ratio config because SGLANG_DIT_PHASE_AWARE_PREFETCH is disabled."
             )
             resident_phase_names = set()
             resident_phase_ratio = None
-            phase_prefetch_ratio = None
 
         for layer_name in self.layer_names:
             module_list = getattr(self, layer_name, None)
@@ -2019,7 +2005,6 @@ class OffloadableDiTMixin:
                 phase_prefetch_depth=phase_prefetch_depth,
                 resident_phase_names=resident_phase_names,
                 resident_phase_ratio=resident_phase_ratio,
-                phase_prefetch_ratio=phase_prefetch_ratio,
                 submodule_granularity=True,
             )
             self.layerwise_offload_managers.append(manager)
@@ -2046,11 +2031,6 @@ class OffloadableDiTMixin:
             logger.info(
                 "Layerwise offload resident ratio requested: %.3f",
                 resident_phase_ratio,
-            )
-        if phase_prefetch_ratio is not None:
-            logger.info(
-                "Layerwise offload phase-prefetch ratio requested: %.3f",
-                phase_prefetch_ratio,
             )
 
     @property

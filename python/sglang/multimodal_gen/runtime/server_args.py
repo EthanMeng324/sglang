@@ -300,7 +300,6 @@ class ServerArgs:
     dit_offload_resident_phases: str = ""
     dit_offload_phase_prefetch_depth: int = 4
     dit_offload_resident_ratio: float | None = None
-    dit_offload_phase_prefetch_ratio: float | None = None
     text_encoder_cpu_offload: bool | None = None
     image_encoder_cpu_offload: bool | None = None
     vae_cpu_offload: bool | None = None
@@ -824,13 +823,6 @@ class ServerArgs:
             "Using 4 matches the current Wan block phase count and effectively permits whole-layer prefetch.",
         )
         parser.add_argument(
-            "--dit-offload-phase-prefetch-ratio",
-            type=float,
-            default=ServerArgs.dit_offload_phase_prefetch_ratio,
-            help="Optional ratio in [0, 1] that converts phase prefetch lookahead from a semantic-byte fraction instead of a raw phase count. "
-            "The runtime rounds to chunk granularity and picks the earliest semantic phase prefix that reaches the target.",
-        )
-        parser.add_argument(
             "--use-fsdp-inference",
             action=StoreBoolean,
             help="Use FSDP for inference by sharding the model weights. Latency is very low due to prefetch--enable if run out of memory.",
@@ -1133,13 +1125,6 @@ class ServerArgs:
                 and not 0.0 <= self.dit_offload_resident_ratio <= 1.0
             ):
                 raise ValueError("dit_offload_resident_ratio must be in [0, 1]")
-            if (
-                self.dit_offload_phase_prefetch_ratio is not None
-                and not 0.0 <= self.dit_offload_phase_prefetch_ratio <= 1.0
-            ):
-                raise ValueError(
-                    "dit_offload_phase_prefetch_ratio must be in [0, 1]"
-                )
 
             if self.use_fsdp_inference:
                 logger.warning(
