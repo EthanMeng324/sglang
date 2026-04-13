@@ -171,13 +171,13 @@ timeline_log "cooldown_end" "warmup" "sleep=${WARMUP_COOLDOWN_SEC}"
 if profile_model_is_image; then
     run_step "No Offload" "run_access_no.sh"
     run_step "Old Offload" "run_access_old.sh"
-    run_step_with_env "Comm-Aware Offload" "run_access_new.sh" \
+    run_step_with_env "Comm-Aware Offload" "run_access.sh" \
         SGLANG_DIT_OFFLOAD_RESIDENT_RATIO= \
         SGLANG_DIT_PHASE_AWARE_PREFETCH=0
     run_step_with_env "Ratio-Resident Offload" "run_access_phase.sh" \
         SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="$RESIDENT_RATIO_EFFECTIVE"
 else
-    run_step_with_env "Comm-Aware Offload" "run_access_new.sh" \
+    run_step_with_env "Comm-Aware Offload" "run_access.sh" \
         SGLANG_DIT_OFFLOAD_RESIDENT_RATIO= \
         SGLANG_DIT_PHASE_AWARE_PREFETCH=0
     run_step_with_env "Ratio-Resident Offload" "run_access_phase.sh" \

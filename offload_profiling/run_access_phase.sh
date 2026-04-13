@@ -6,4 +6,4 @@ exec env \
     PROFILE_MODE=ratio \
     SGLANG_DIT_PHASE_AWARE_PREFETCH=0 \
     SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO:-0.4}" \
-    bash "$SCRIPT_DIR/run_access_new.sh" "$@"
+    bash "$SCRIPT_DIR/run_access.sh" "$@"
