@@ -183,6 +183,9 @@ class LayerwiseOffloadManager:
         self._prefetch_chunk_events: Dict[
             int, Dict[int, List[Tuple[torch.cuda.Event, int]]]
         ] = {}
+        self._deferred_gpu_buffer_releases: List[
+            Tuple[torch.cuda.Event, List[torch.Tensor]]
+        ] = []
         # GPU resident layers
         self._gpu_layers: Set[int] = set()
         # dtype -> shared placeholder used when an offloaded tensor is detached from
@@ -431,6 +434,29 @@ class LayerwiseOffloadManager:
 
     def _phase_is_resident(self, phase_idx: int) -> bool:
         return phase_idx in self._resident_phase_ids
+
+    def _reap_deferred_gpu_releases_locked(self) -> None:
+        if not self._deferred_gpu_buffer_releases:
+            return
+        retained: List[Tuple[torch.cuda.Event, List[torch.Tensor]]] = []
+        for event, tensors in self._deferred_gpu_buffer_releases:
+            try:
+                if event.query():
+                    continue
+            except Exception:
+                retained.append((event, tensors))
+                continue
+            retained.append((event, tensors))
+        self._deferred_gpu_buffer_releases = retained
+
+    def _defer_gpu_buffer_release_locked(
+        self, tensors: List[torch.Tensor] | None
+    ) -> None:
+        if not tensors:
+            return
+        event = torch.cuda.Event()
+        event.record(torch.cuda.current_stream())
+        self._deferred_gpu_buffer_releases.append((event, list(tensors)))
 
     def _phase_completed_locked(self, layer_idx: int, phase_idx: int) -> bool:
         if self._phase_is_resident(phase_idx):
@@ -697,6 +723,7 @@ class LayerwiseOffloadManager:
         )
 
     def _snapshot_runtime_state_locked(self) -> Dict[str, float]:
+        self._reap_deferred_gpu_releases_locked()
         prefetch_buffer_bytes = 0
         for phase_buffers in self._prefetch_gpu_buffers.values():
             for dtype_buffers in phase_buffers.values():
@@ -1069,6 +1096,7 @@ class LayerwiseOffloadManager:
 
         with self._copy_lock:
             with self._state_lock:
+                self._reap_deferred_gpu_releases_locked()
                 if self._phase_completed_locked(layer_idx, phase_idx):
                     if self._prefetch_goal_complete_locked(layer_idx):
                         self._clear_layer_schedule_locked(layer_idx)
@@ -1602,7 +1630,11 @@ class LayerwiseOffloadManager:
 
         layer_gpu_buffers = self._prefetch_gpu_buffers.get(layer_idx)
         if layer_gpu_buffers is not None:
-            layer_gpu_buffers.pop(phase_idx, None)
+            removed_phase_buffers = layer_gpu_buffers.pop(phase_idx, None)
+            deferred_tensors = (
+                list(removed_phase_buffers.values()) if removed_phase_buffers else None
+            )
+            self._defer_gpu_buffer_release_locked(deferred_tensors)
             if not layer_gpu_buffers:
                 self._prefetch_gpu_buffers.pop(layer_idx, None)
 
@@ -1638,6 +1670,7 @@ class LayerwiseOffloadManager:
             return
 
         with self._state_lock:
+            self._reap_deferred_gpu_releases_locked()
             for name, meta in self._weight_metadata.get(layer_idx, {}).items():
                 if meta.get("resident", False):
                     continue
@@ -1647,7 +1680,12 @@ class LayerwiseOffloadManager:
             self._prefetch_events.pop(layer_idx, None)
             self._phase_events.pop(layer_idx, None)
             self._prefetch_chunk_events.pop(layer_idx, None)
-            self._prefetch_gpu_buffers.pop(layer_idx, None)
+            removed_layer_buffers = self._prefetch_gpu_buffers.pop(layer_idx, None)
+            if removed_layer_buffers is not None:
+                deferred_tensors: List[torch.Tensor] = []
+                for phase_buffers in removed_layer_buffers.values():
+                    deferred_tensors.extend(list(phase_buffers.values()))
+                self._defer_gpu_buffer_release_locked(deferred_tensors)
             self._prefetch_offsets.pop(layer_idx, None)
             self._phase_frontiers.pop(layer_idx, None)
             self._scheduled_layers.discard(layer_idx)
