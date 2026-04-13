@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a concise profile matrix summary for no/old/new/phase offload runs."""
+"""Build a concise profile matrix summary for no/old/new/ratio-resident offload runs."""
 
 from __future__ import annotations
 
@@ -18,16 +18,16 @@ DEFAULT_PROFILES = {
     "no": Path("offload_profiling/results/profiles/no_offload_nsys.nsys-rep"),
     "old": Path("offload_profiling/results/profiles/old_offload_nsys.nsys-rep"),
     "new": Path("offload_profiling/results/profiles/new_offload_nsys.nsys-rep"),
-    "phase": Path("offload_profiling/results/profiles/phase_offload_nsys.nsys-rep"),
+    "ratio": Path("offload_profiling/results/profiles/ratio_resident_offload_nsys.nsys-rep"),
 }
 
-MAIN_RUNS = ["no", "old", "new", "phase"]
+MAIN_RUNS = ["no", "old", "new", "ratio"]
 
 LABELS = {
     "no": "No Offload",
     "old": "Old",
     "new": "New",
-    "phase": "Phase",
+    "ratio": "Ratio Resident",
 }
 
 STEP_GLOB = "SGL_DENOISING_STEP_*"
@@ -41,6 +41,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     for key, path in DEFAULT_PROFILES.items():
         parser.add_argument(f"--{key}", type=Path, default=path)
+    parser.add_argument(
+        "--phase",
+        type=Path,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -84,7 +90,12 @@ def find_perf_json(run: str, trace_path: Path) -> Path | None:
         "new": ["perf_new_offload_profiled.json", "perf_new_offload.json"],
         "old": ["perf_old_offload_profiled.json", "perf_old_offload.json"],
         "no": ["perf_no_offload_profiled.json", "perf_no_offload.json"],
-        "phase": ["perf_phase_offload_profiled.json", "perf_phase_offload.json"],
+        "ratio": [
+            "perf_ratio_resident_offload_profiled.json",
+            "perf_ratio_resident_offload.json",
+            "perf_phase_offload_profiled.json",
+            "perf_phase_offload.json",
+        ],
     }
     profiles_dir = trace_path.parent
     if trace_path.suffix == ".sqlite" and profiles_dir.name == "sqlite_cache":
@@ -301,13 +312,26 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
     rows = []
     export_dir = args.export_dir
     export_dir.mkdir(parents=True, exist_ok=True)
+    if args.phase is not None and not args.ratio.exists() and args.phase.exists():
+        args.ratio = args.phase
     for key in MAIN_RUNS:
         path: Path = getattr(args, key)
-        step_override = env_float(f"{key.upper()}_STEP_TIME_S")
-        peak_reserved_override = env_float(f"{key.upper()}_PEAK_RESERVED_MB")
+        env_prefixes = [key.upper()]
+        if key == "ratio":
+            env_prefixes.append("PHASE")
+
+        def env_override(metric_suffix: str) -> float | None:
+            for prefix in env_prefixes:
+                value = env_float(f"{prefix}_{metric_suffix}")
+                if value is not None:
+                    return value
+            return None
+
+        step_override = env_override("STEP_TIME_S")
+        peak_reserved_override = env_override("PEAK_RESERVED_MB")
         if peak_reserved_override is None:
-            peak_reserved_override = env_float(f"{key.upper()}_PEAK_MEMORY_MB")
-        peak_allocated_override = env_float(f"{key.upper()}_PEAK_ALLOCATED_MB")
+            peak_reserved_override = env_override("PEAK_MEMORY_MB")
+        peak_allocated_override = env_override("PEAK_ALLOCATED_MB")
         perf_path = find_perf_json(key, path)
         perf_json = load_json(perf_path)
         perf_peak_reserved_mb, perf_peak_allocated_mb = extract_peak_memory_pair(

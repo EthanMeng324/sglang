@@ -119,6 +119,11 @@ class LayerwiseOffloadManager:
             max(1, phase_prefetch_depth), len(self.phase_specs)
         )
         self._auto_bucket_phases = resident_phase_ratio is not None
+        self._use_record_stream_protection = self._auto_bucket_phases
+        self._use_deferred_buffer_release = bool(
+            self._auto_bucket_phases
+            and _env_bool("SGLANG_DIT_OFFLOAD_DEFER_BUCKET_RELEASE", False)
+        )
         self.phase_name_to_idx = {
             spec.name: phase_idx for phase_idx, spec in enumerate(self.phase_specs)
         }
@@ -424,6 +429,8 @@ class LayerwiseOffloadManager:
         return phase_idx in self._resident_phase_ids
 
     def _reap_deferred_gpu_releases_locked(self) -> None:
+        if not self._use_deferred_buffer_release:
+            return
         if not self._deferred_gpu_buffer_releases:
             return
         retained: List[Tuple[torch.cuda.Event, List[torch.Tensor]]] = []
@@ -440,6 +447,8 @@ class LayerwiseOffloadManager:
     def _defer_gpu_buffer_release_locked(
         self, tensors: List[torch.Tensor] | None
     ) -> None:
+        if not self._use_deferred_buffer_release:
+            return
         if not tensors:
             return
         event = torch.cuda.Event()
@@ -1058,6 +1067,8 @@ class LayerwiseOffloadManager:
     @torch.compiler.disable
     def _record_materialized_layer_buffers_on_current_stream(self, layer_idx: int) -> None:
         if not self.enabled:
+            return
+        if not self._use_record_stream_protection:
             return
         current_stream = torch.cuda.current_stream()
         with self._state_lock:
@@ -1965,15 +1976,16 @@ class OffloadableDiTMixin:
         resident_phase_names |= _parse_phase_name_csv(
             _env_str("SGLANG_DIT_OFFLOAD_RESIDENT_PHASES", "")
         )
-        if (
-            resident_phase_names
-            or resident_phase_ratio is not None
-        ) and not phase_aware:
+        if resident_phase_names and not phase_aware:
             logger.info(
-                "Ignoring phase-aware resident/prefetch ratio config because SGLANG_DIT_PHASE_AWARE_PREFETCH is disabled."
+                "Ignoring phase-aware resident phase names because SGLANG_DIT_PHASE_AWARE_PREFETCH is disabled."
             )
             resident_phase_names = set()
-            resident_phase_ratio = None
+        if resident_phase_ratio is not None and not phase_aware:
+            logger.info(
+                "Layerwise offload resident ratio is enabled without phase-aware barriers; "
+                "the runtime will still ensure the whole layer is ready before compute."
+            )
 
         for layer_name in self.layer_names:
             module_list = getattr(self, layer_name, None)

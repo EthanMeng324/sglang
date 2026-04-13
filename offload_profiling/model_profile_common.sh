@@ -83,7 +83,8 @@ resolve_profile_model() {
         new) mode_stem="new_offload" ;;
         no) mode_stem="no_offload" ;;
         old) mode_stem="old_offload" ;;
-        phase) mode_stem="phase_offload" ;;
+        ratio) mode_stem="ratio_resident_offload" ;;
+        phase) mode_stem="ratio_resident_offload" ;;
         *)
             echo "ERROR: unsupported profiling mode '$mode'."
             return 1

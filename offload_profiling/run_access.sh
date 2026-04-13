@@ -39,7 +39,13 @@ echo ""
 python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU count: {torch.cuda.device_count()}')"
 echo ""
 
-resolve_profile_model new "${1:-}"
+PROFILE_MODE="${PROFILE_MODE:-new}"
+if [[ "$PROFILE_MODE" != "new" && "$PROFILE_MODE" != "ratio" ]]; then
+    echo "ERROR: unsupported PROFILE_MODE='$PROFILE_MODE'. Supported: new, ratio."
+    exit 1
+fi
+
+resolve_profile_model "$PROFILE_MODE" "${1:-}"
 apply_profile_model_defaults
 apply_profile_output_layout
 
@@ -108,6 +114,14 @@ export SGLANG_WAN_MOCK_COMM_TRAFFIC_SCALE="${SGLANG_WAN_MOCK_COMM_TRAFFIC_SCALE:
 export SGLANG_WAN_MOCK_COMM_MAX_MB="${SGLANG_WAN_MOCK_COMM_MAX_MB:-256}"
 export SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES="${SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES:-0}"
 PROFILE_SAVE_OUTPUT_ARTIFACTS="${PROFILE_SAVE_OUTPUT_ARTIFACTS:-0}"
+if [[ "$PROFILE_MODE" == "ratio" ]]; then
+    export SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO:-0.4}"
+fi
+
+RUN_LABEL="Comm-Aware Offload"
+if [[ "$PROFILE_MODE" == "ratio" ]]; then
+    RUN_LABEL="Ratio-Resident Offload"
+fi
 
 OUTPUT_FLAGS=(
     --output-path "$OUTPUT_DIR"
@@ -118,13 +132,16 @@ if [[ "$PROFILE_SAVE_OUTPUT_ARTIFACTS" != "1" ]]; then
 fi
 
 echo "=========================================="
-echo "RUN: Profiled run (nsys)"
+echo "RUN: ${RUN_LABEL} (nsys)"
 echo "=========================================="
 echo "Start: $(date)"
 echo "Profile model: ${PROFILE_MODEL}"
 echo "Batch size: ${NUM_OUTPUTS_PER_PROMPT}"
 echo "Artifact: $(format_output_display_path "$VIDEO_OUT" "$NUM_OUTPUTS_PER_PROMPT")"
 echo "Save artifact: ${PROFILE_SAVE_OUTPUT_ARTIFACTS}"
+if [[ "$PROFILE_MODE" == "ratio" ]]; then
+    echo "Resident ratio: ${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO}"
+fi
 echo "Force diffusers timestep embedding: ${SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING:-0}"
 echo "Mock PCIe config: enabled=${SGLANG_WAN_MOCK_COMM_ENABLE}, pcie_mb=${SGLANG_WAN_MOCK_COMM_PCIE_MB}, every_n_blocks=${SGLANG_WAN_MOCK_COMM_EVERY_N_BLOCKS}, comm_aware=${SGLANG_DIT_COMM_AWARE_OFFLOAD}"
 

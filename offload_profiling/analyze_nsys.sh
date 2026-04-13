@@ -30,7 +30,7 @@ case "$PROFILE_MODEL" in
         NEW_NSYS="${NEW_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/new_offload_nsys.nsys-rep" "$PROFILES_DIR/new_offload_nsys.nsys-rep")}"
         OLD_NSYS="${OLD_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/old_offload_nsys.nsys-rep" "$PROFILES_DIR/old_offload_nsys.nsys-rep")}"
         NO_NSYS="${NO_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/no_offload_nsys.nsys-rep" "$PROFILES_DIR/no_offload_nsys.nsys-rep")}"
-        PHASE_NSYS="${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/phase_offload_nsys.nsys-rep" "$PROFILES_DIR/phase_offload_nsys.nsys-rep")}"
+        RATIO_NSYS="${RATIO_NSYS:-${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/ratio_resident_offload_nsys.nsys-rep" "$MODEL_PROFILES_DIR/phase_offload_nsys.nsys-rep")}}"
         ;;
     flux|flux1|flux_1|fluximage|flux_image)
         PROFILE_MODEL="flux"
@@ -39,7 +39,7 @@ case "$PROFILE_MODEL" in
         NEW_NSYS="${NEW_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_new_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_new_offload_nsys.nsys-rep")}"
         OLD_NSYS="${OLD_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_old_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_old_offload_nsys.nsys-rep")}"
         NO_NSYS="${NO_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_no_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_no_offload_nsys.nsys-rep")}"
-        PHASE_NSYS="${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_phase_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_phase_offload_nsys.nsys-rep")}"
+        RATIO_NSYS="${RATIO_NSYS:-${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_ratio_resident_offload_nsys.nsys-rep" "$MODEL_PROFILES_DIR/flux_phase_offload_nsys.nsys-rep")}}"
         ;;
     flux_2|flux2|flux-2|flux2dev|flux_2_dev)
         PROFILE_MODEL="flux_2"
@@ -48,7 +48,7 @@ case "$PROFILE_MODEL" in
         NEW_NSYS="${NEW_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_2_new_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_2_new_offload_nsys.nsys-rep")}"
         OLD_NSYS="${OLD_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_2_old_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_2_old_offload_nsys.nsys-rep")}"
         NO_NSYS="${NO_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_2_no_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_2_no_offload_nsys.nsys-rep")}"
-        PHASE_NSYS="${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_2_phase_offload_nsys.nsys-rep" "$PROFILES_DIR/flux_2_phase_offload_nsys.nsys-rep")}"
+        RATIO_NSYS="${RATIO_NSYS:-${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/flux_2_ratio_resident_offload_nsys.nsys-rep" "$MODEL_PROFILES_DIR/flux_2_phase_offload_nsys.nsys-rep")}}"
         ;;
     hunyuan|hunyuanvideo)
         PROFILE_MODEL="hunyuanvideo"
@@ -57,7 +57,7 @@ case "$PROFILE_MODEL" in
         NEW_NSYS="${NEW_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/hunyuanvideo_new_offload_nsys.nsys-rep" "$PROFILES_DIR/hunyuanvideo_new_offload_nsys.nsys-rep")}"
         OLD_NSYS="${OLD_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/hunyuanvideo_old_offload_nsys.nsys-rep" "$PROFILES_DIR/hunyuanvideo_old_offload_nsys.nsys-rep")}"
         NO_NSYS="${NO_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/hunyuanvideo_no_offload_nsys.nsys-rep" "$PROFILES_DIR/hunyuanvideo_no_offload_nsys.nsys-rep")}"
-        PHASE_NSYS="${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/hunyuanvideo_phase_offload_nsys.nsys-rep" "$PROFILES_DIR/hunyuanvideo_phase_offload_nsys.nsys-rep")}"
+        RATIO_NSYS="${RATIO_NSYS:-${PHASE_NSYS:-$(resolve_trace_path "$MODEL_PROFILES_DIR/hunyuanvideo_ratio_resident_offload_nsys.nsys-rep" "$MODEL_PROFILES_DIR/hunyuanvideo_phase_offload_nsys.nsys-rep")}}"
         ;;
     *)
         echo "ERROR: unsupported PROFILE_MODEL='$PROFILE_MODEL'. Supported: wanvideo, flux, flux_2, hunyuanvideo."
@@ -101,13 +101,14 @@ echo "model: $PROFILE_MODEL"
 echo "new  : $NEW_NSYS"
 echo "old  : $OLD_NSYS"
 echo "no   : $NO_NSYS"
-echo "phase: $PHASE_NSYS"
+echo "ratio: $RATIO_NSYS"
 echo "out  : $ANALYSIS_DIR"
 echo ""
 echo "Optional overrides:"
-echo "  NO_STEP_TIME_S / OLD_STEP_TIME_S / NEW_STEP_TIME_S / PHASE_STEP_TIME_S"
-echo "  NO_PEAK_RESERVED_MB / OLD_PEAK_RESERVED_MB / NEW_PEAK_RESERVED_MB / PHASE_PEAK_RESERVED_MB"
-echo "  NO_PEAK_ALLOCATED_MB / OLD_PEAK_ALLOCATED_MB / NEW_PEAK_ALLOCATED_MB / PHASE_PEAK_ALLOCATED_MB"
+echo "  NO_STEP_TIME_S / OLD_STEP_TIME_S / NEW_STEP_TIME_S / RATIO_STEP_TIME_S"
+echo "  Legacy alias still accepted: PHASE_STEP_TIME_S"
+echo "  NO_PEAK_RESERVED_MB / OLD_PEAK_RESERVED_MB / NEW_PEAK_RESERVED_MB / RATIO_PEAK_RESERVED_MB"
+echo "  NO_PEAK_ALLOCATED_MB / OLD_PEAK_ALLOCATED_MB / NEW_PEAK_ALLOCATED_MB / RATIO_PEAK_ALLOCATED_MB"
 echo "  Legacy aliases: *_PEAK_MEMORY_MB -> *_PEAK_RESERVED_MB"
 echo ""
 
@@ -115,7 +116,7 @@ python3 "$SCRIPT_DIR/summarize_profile_matrix.py" \
     --no "$NO_NSYS" \
     --old "$OLD_NSYS" \
     --new "$NEW_NSYS" \
-    --phase "$PHASE_NSYS" \
+    --ratio "$RATIO_NSYS" \
     --output "$ANALYSIS_DIR/analysis_summary.md" \
     --csv-output "$ANALYSIS_DIR/profile_matrix.csv"
 

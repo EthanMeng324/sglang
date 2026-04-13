@@ -11,7 +11,7 @@ usage() {
     cat <<'EOF'
 Usage:
   bash offload_profiling/run_profile_dmon.sh <model> [num_frames]
-  bash offload_profiling/run_profile_dmon.sh --model <model> [--num-frames <n>] [--batch-size <n>]
+  bash offload_profiling/run_profile_dmon.sh --model <model> [--num-frames <n>] [--batch-size <n>] [--resident-ratio <r>]
 
 Supported models:
   wanvideo
@@ -35,19 +35,17 @@ Optional env vars:
   GPU_QUERY_OUTPUT_PATH   Optional explicit detailed telemetry CSV path
   GPU_QUERY_FIELDS        Optional explicit --query-gpu field list
   BATCH_SIZE / NUM_OUTPUTS_PER_PROMPT  Number of outputs per prompt (useful for flux/flux_2)
-  SGLANG_DIT_OFFLOAD_RESIDENT_PHASES
   SGLANG_DIT_OFFLOAD_RESIDENT_RATIO
+    default: 0.4 for the final ratio-resident run
   PROFILE_SAVE_OUTPUT_ARTIFACTS
     default: 0 for profiling reliability; set to 1 to keep generated media artifacts
-    wanvideo: entry,self_attn_tail,cross_attn,ffn
-    hunyuanvideo: double_blocks -> entry,self_attn_tail,ffn; single_blocks -> entry,tail
-    flux / flux_2: transformer_blocks -> entry,self_attn_tail,ffn; single_transformer_blocks -> entry,tail
 EOF
 }
 
 PROFILE_MODEL="${PROFILE_MODEL:-}"
 NUM_FRAMES_OVERRIDE="${NUM_FRAMES:-}"
 BATCH_SIZE_OVERRIDE="${BATCH_SIZE:-${NUM_OUTPUTS_PER_PROMPT:-}}"
+RESIDENT_RATIO_OVERRIDE="${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO:-}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -61,6 +59,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --batch-size|--num-outputs-per-prompt)
             BATCH_SIZE_OVERRIDE="$2"
+            shift 2
+            ;;
+        --resident-ratio)
+            RESIDENT_RATIO_OVERRIDE="$2"
             shift 2
             ;;
         -h|--help)
@@ -95,6 +97,7 @@ fi
 resolve_profile_model no "$PROFILE_MODEL" >/dev/null
 apply_profile_model_defaults
 apply_profile_output_layout
+RESIDENT_RATIO_EFFECTIVE="${RESIDENT_RATIO_OVERRIDE:-${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO:-0.4}}"
 
 if ! command -v nvidia-smi >/dev/null 2>&1; then
     echo "ERROR: nvidia-smi not found in PATH."
@@ -162,6 +165,7 @@ echo "=========================================="
 echo "Model        : ${PROFILE_MODEL}"
 echo "Num frames   : ${NUM_FRAMES_OVERRIDE:-default}"
 echo "Batch size   : ${BATCH_SIZE_OVERRIDE:-default}"
+echo "Resident ratio: ${RESIDENT_RATIO_EFFECTIVE}"
 echo "DMON output  : ${DMON_OUTPUT_PATH}"
 echo "GPU telemetry: ${GPU_QUERY_OUTPUT_PATH}"
 echo "Summary md   : ${GPU_QUERY_SUMMARY_MD}"
@@ -222,6 +226,9 @@ if [[ -n "${NUM_FRAMES_OVERRIDE:-}" ]]; then
 fi
 if [[ -n "${BATCH_SIZE_OVERRIDE:-}" ]]; then
     RUN_PROFILE_CMD+=(--batch-size "$BATCH_SIZE_OVERRIDE")
+fi
+if [[ -n "${RESIDENT_RATIO_OVERRIDE:-}" || -n "${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO:-}" ]]; then
+    RUN_PROFILE_CMD+=(--resident-ratio "$RESIDENT_RATIO_EFFECTIVE")
 fi
 TIMELINE_LOG_PATH="$TIMELINE_LOG_PATH" "${RUN_PROFILE_CMD[@]}"
 
