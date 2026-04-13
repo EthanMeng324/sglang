@@ -37,6 +37,8 @@ Optional env vars:
   BATCH_SIZE / NUM_OUTPUTS_PER_PROMPT  Number of outputs per prompt (useful for flux/flux_2)
   SGLANG_DIT_OFFLOAD_RESIDENT_PHASES
   SGLANG_DIT_OFFLOAD_RESIDENT_RATIO
+  PROFILE_SAVE_OUTPUT_ARTIFACTS
+    default: 0 for profiling reliability; set to 1 to keep generated media artifacts
     wanvideo: entry,self_attn_tail,cross_attn,ffn
     hunyuanvideo: double_blocks -> entry,self_attn_tail,ffn; single_blocks -> entry,tail
     flux / flux_2: transformer_blocks -> entry,self_attn_tail,ffn; single_transformer_blocks -> entry,tail

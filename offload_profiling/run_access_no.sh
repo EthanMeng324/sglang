@@ -122,6 +122,23 @@ export SGLANG_WAN_MOCK_COMM_VIRTUAL_SP_DEGREE="${SGLANG_WAN_MOCK_COMM_VIRTUAL_SP
 export SGLANG_WAN_MOCK_COMM_TRAFFIC_SCALE="${SGLANG_WAN_MOCK_COMM_TRAFFIC_SCALE:-1.0}"
 export SGLANG_WAN_MOCK_COMM_MAX_MB="${SGLANG_WAN_MOCK_COMM_MAX_MB:-256}"
 export SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES="${SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES:-0}"
+PROFILE_SAVE_OUTPUT_ARTIFACTS="${PROFILE_SAVE_OUTPUT_ARTIFACTS:-0}"
+
+OUTPUT_FLAGS=(
+    --output-path "$OUTPUT_DIR"
+    --output-file-name "$OUTPUT_FILE_NAME"
+)
+if [[ "$PROFILE_SAVE_OUTPUT_ARTIFACTS" != "1" ]]; then
+    OUTPUT_FLAGS+=(--no-save-output)
+fi
+
+WARMUP_OUTPUT_FLAGS=(
+    --output-path "$WARMUP_OUTPUT_DIR"
+    --output-file-name "$WARMUP_OUTPUT_FILE_NAME"
+)
+if [[ "$PROFILE_SAVE_OUTPUT_ARTIFACTS" != "1" ]]; then
+    WARMUP_OUTPUT_FLAGS+=(--no-save-output)
+fi
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
     DEFAULT_WARMUP_EXT="mp4"
@@ -147,6 +164,7 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
     echo "Profile model: ${PROFILE_MODEL}"
     echo "Batch size: ${NUM_OUTPUTS_PER_PROMPT}"
     echo "Output: $(format_output_display_path "$WARMUP_OUT" "$NUM_OUTPUTS_PER_PROMPT")"
+    echo "Save artifact: ${PROFILE_SAVE_OUTPUT_ARTIFACTS}"
     echo "DIT_CPU_OFFLOAD_OVERRIDE=${DIT_CPU_OFFLOAD_OVERRIDE_DISPLAY}"
     echo "DIT CPU offload flag: ${DIT_CPU_OFFLOAD_FLAG_DISPLAY}"
     echo "Server port override: ${SERVER_PORT_OVERRIDE:-<default>}"
@@ -156,8 +174,7 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
 
     time sglang generate "${COMMON_FLAGS[@]}" \
         --perf-dump-path "$WARMUP_PERF_OUT" \
-        --output-path "$WARMUP_OUTPUT_DIR" \
-        --output-file-name "$WARMUP_OUTPUT_FILE_NAME"
+        "${WARMUP_OUTPUT_FLAGS[@]}"
 
     echo "End: $(date)"
     echo ""
@@ -174,6 +191,7 @@ echo "Start: $(date)"
 echo "Profile model: ${PROFILE_MODEL}"
 echo "Batch size: ${NUM_OUTPUTS_PER_PROMPT}"
 echo "Artifact: $(format_output_display_path "$VIDEO_OUT" "$NUM_OUTPUTS_PER_PROMPT")"
+echo "Save artifact: ${PROFILE_SAVE_OUTPUT_ARTIFACTS}"
 echo "DIT_CPU_OFFLOAD_OVERRIDE=${DIT_CPU_OFFLOAD_OVERRIDE_DISPLAY}"
 echo "DIT CPU offload flag: ${DIT_CPU_OFFLOAD_FLAG_DISPLAY}"
 echo "Server port override: ${SERVER_PORT_OVERRIDE:-<default>}"
@@ -191,8 +209,7 @@ time nsys profile \
     --output="$NSYS_OUTPUT_PREFIX" \
     sglang generate "${COMMON_FLAGS[@]}" \
     --perf-dump-path "$PERF_OUT" \
-    --output-path "$OUTPUT_DIR" \
-    --output-file-name "$OUTPUT_FILE_NAME"
+    "${OUTPUT_FLAGS[@]}"
 
 echo "End: $(date)"
 

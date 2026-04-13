@@ -104,6 +104,15 @@ export SGLANG_WAN_MOCK_COMM_VIRTUAL_SP_DEGREE="${SGLANG_WAN_MOCK_COMM_VIRTUAL_SP
 export SGLANG_WAN_MOCK_COMM_TRAFFIC_SCALE="${SGLANG_WAN_MOCK_COMM_TRAFFIC_SCALE:-1.0}"
 export SGLANG_WAN_MOCK_COMM_MAX_MB="${SGLANG_WAN_MOCK_COMM_MAX_MB:-256}"
 export SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES="${SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES:-0}"
+PROFILE_SAVE_OUTPUT_ARTIFACTS="${PROFILE_SAVE_OUTPUT_ARTIFACTS:-0}"
+
+OUTPUT_FLAGS=(
+    --output-path "$OUTPUT_DIR"
+    --output-file-name "$OUTPUT_FILE_NAME"
+)
+if [[ "$PROFILE_SAVE_OUTPUT_ARTIFACTS" != "1" ]]; then
+    OUTPUT_FLAGS+=(--no-save-output)
+fi
 
 echo "=========================================="
 echo "RUN: Profiled run (nsys)"
@@ -112,6 +121,7 @@ echo "Start: $(date)"
 echo "Profile model: ${PROFILE_MODEL}"
 echo "Batch size: ${NUM_OUTPUTS_PER_PROMPT}"
 echo "Artifact: $(format_output_display_path "$VIDEO_OUT" "$NUM_OUTPUTS_PER_PROMPT")"
+echo "Save artifact: ${PROFILE_SAVE_OUTPUT_ARTIFACTS}"
 echo "Force diffusers timestep embedding: ${SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING:-0}"
 echo "Mock PCIe config: enabled=${SGLANG_WAN_MOCK_COMM_ENABLE}, pcie_mb=${SGLANG_WAN_MOCK_COMM_PCIE_MB}, every_n_blocks=${SGLANG_WAN_MOCK_COMM_EVERY_N_BLOCKS}, comm_aware=0"
 
@@ -124,8 +134,7 @@ time nsys profile \
     --output="$NSYS_OUTPUT_PREFIX" \
     sglang generate "${COMMON_FLAGS[@]}" \
     --perf-dump-path "$PERF_OUT" \
-    --output-path "$OUTPUT_DIR" \
-    --output-file-name "$OUTPUT_FILE_NAME"
+    "${OUTPUT_FLAGS[@]}"
 
 echo "End: $(date)"
 

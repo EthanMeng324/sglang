@@ -22,6 +22,8 @@ Notes:
   - For flux/flux_2, --batch-size maps to --num-outputs-per-prompt and generates multiple images from the same prompt
   - Phase resident phases can be overridden with SGLANG_DIT_OFFLOAD_RESIDENT_PHASES=<csv>
   - Phase resident bytes can also be requested with SGLANG_DIT_OFFLOAD_RESIDENT_RATIO=<0..1>
+  - Profiling defaults to PROFILE_SAVE_OUTPUT_ARTIFACTS=0 to avoid video/image save failures affecting perf/nsys
+    set PROFILE_SAVE_OUTPUT_ARTIFACTS=1 if you explicitly want the generated artifact
     wanvideo: entry,self_attn_tail,cross_attn,ffn
     hunyuanvideo:
       double_blocks -> entry,self_attn_tail,ffn
