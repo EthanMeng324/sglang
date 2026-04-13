@@ -132,14 +132,6 @@ if [[ "$PROFILE_SAVE_OUTPUT_ARTIFACTS" != "1" ]]; then
     OUTPUT_FLAGS+=(--no-save-output)
 fi
 
-WARMUP_OUTPUT_FLAGS=(
-    --output-path "$WARMUP_OUTPUT_DIR"
-    --output-file-name "$WARMUP_OUTPUT_FILE_NAME"
-)
-if [[ "$PROFILE_SAVE_OUTPUT_ARTIFACTS" != "1" ]]; then
-    WARMUP_OUTPUT_FLAGS+=(--no-save-output)
-fi
-
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
     DEFAULT_WARMUP_EXT="mp4"
     if profile_model_is_image; then
@@ -156,6 +148,13 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
     mkdir -p "$WARMUP_OUTPUT_DIR"
     WARMUP_OUT="${WARMUP_OUTPUT_DIR%/}/${WARMUP_OUTPUT_FILE_NAME}"
     WARMUP_PERF_OUT="${WARMUP_PERF_OUT:-${MODEL_PROFILES_DIR:-$PROFILES_DIR}/perf_${PROFILE_MODEL}_warmup_no_offload_profiled.json}"
+    WARMUP_OUTPUT_FLAGS=(
+        --output-path "$WARMUP_OUTPUT_DIR"
+        --output-file-name "$WARMUP_OUTPUT_FILE_NAME"
+    )
+    if [[ "$PROFILE_SAVE_OUTPUT_ARTIFACTS" != "1" ]]; then
+        WARMUP_OUTPUT_FLAGS+=(--no-save-output)
+    fi
 
     echo "=========================================="
     echo "RUN: Warmup dry run (no offload)"
