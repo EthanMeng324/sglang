@@ -1042,6 +1042,17 @@ class LayerwiseOffloadManager:
             ].view(meta["shape"])
 
     @torch.compiler.disable
+    def _record_materialized_layer_buffers_on_current_stream(self, layer_idx: int) -> None:
+        if not self.enabled:
+            return
+        current_stream = torch.cuda.current_stream()
+        with self._state_lock:
+            layer_gpu_buffers = self._prefetch_gpu_buffers.get(layer_idx, {})
+            for phase_buffers in layer_gpu_buffers.values():
+                for gpu_buffer in phase_buffers.values():
+                    gpu_buffer.record_stream(current_stream)
+
+    @torch.compiler.disable
     def quiesce_copy_stream_for_comm(self) -> None:
         """Ensure no in-flight/offloaded H2D remains before communication starts."""
         if not self.enabled or self.copy_stream is None:
@@ -1341,6 +1352,7 @@ class LayerwiseOffloadManager:
 
             if event is not None:
                 torch.cuda.current_stream().wait_event(event)
+            self._record_materialized_layer_buffers_on_current_stream(layer_idx)
             with self._state_lock:
                 if target_phase_idx is None and self._layer_complete_locked(layer_idx):
                     self._gpu_layers.add(layer_idx)
