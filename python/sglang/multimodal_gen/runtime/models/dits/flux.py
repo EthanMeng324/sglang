@@ -547,6 +547,11 @@ class FluxSingleTransformerBlock(nn.Module):
             attn_output = self.attn(
                 x=norm_hidden_states,
                 freqs_cis=freqs_cis,
+                phase_barrier_fn=(
+                    lambda: phase_barrier_fn(block_idx, "tail")
+                    if phase_barrier_fn is not None and block_idx is not None
+                    else None
+                ),
                 **joint_attention_kwargs,
             )
 
