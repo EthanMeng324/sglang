@@ -11,7 +11,7 @@ usage() {
     cat <<'EOF'
 Usage:
   bash offload_profiling/run_profile_dmon.sh <model> [num_frames]
-  bash offload_profiling/run_profile_dmon.sh --model <model> [--num-frames <n>] [--batch-size <n>] [--resident-ratio <r>]
+  bash offload_profiling/run_profile_dmon.sh --model <model> [--num-frames <n>] [--batch-size <n>] [--resident-ratio <r>] [--steps <csv>]
 
 Supported models:
   wanvideo
@@ -46,6 +46,7 @@ PROFILE_MODEL="${PROFILE_MODEL:-}"
 NUM_FRAMES_OVERRIDE="${NUM_FRAMES:-}"
 BATCH_SIZE_OVERRIDE="${BATCH_SIZE:-${NUM_OUTPUTS_PER_PROMPT:-}}"
 RESIDENT_RATIO_OVERRIDE="${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO:-}"
+PROFILE_STEPS_OVERRIDE="${PROFILE_STEPS:-}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -63,6 +64,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --resident-ratio)
             RESIDENT_RATIO_OVERRIDE="$2"
+            shift 2
+            ;;
+        --steps)
+            PROFILE_STEPS_OVERRIDE="$2"
             shift 2
             ;;
         -h|--help)
@@ -165,6 +170,7 @@ echo "=========================================="
 echo "Model        : ${PROFILE_MODEL}"
 echo "Num frames   : ${NUM_FRAMES_OVERRIDE:-default}"
 echo "Batch size   : ${BATCH_SIZE_OVERRIDE:-default}"
+echo "Steps        : ${PROFILE_STEPS_OVERRIDE:-all}"
 echo "Resident ratio: ${RESIDENT_RATIO_EFFECTIVE}"
 echo "DMON output  : ${DMON_OUTPUT_PATH}"
 echo "GPU telemetry: ${GPU_QUERY_OUTPUT_PATH}"
@@ -229,6 +235,9 @@ if [[ -n "${BATCH_SIZE_OVERRIDE:-}" ]]; then
 fi
 if [[ -n "${RESIDENT_RATIO_OVERRIDE:-}" || -n "${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO:-}" ]]; then
     RUN_PROFILE_CMD+=(--resident-ratio "$RESIDENT_RATIO_EFFECTIVE")
+fi
+if [[ -n "${PROFILE_STEPS_OVERRIDE:-}" ]]; then
+    RUN_PROFILE_CMD+=(--steps "$PROFILE_STEPS_OVERRIDE")
 fi
 TIMELINE_LOG_PATH="$TIMELINE_LOG_PATH" "${RUN_PROFILE_CMD[@]}"
 
