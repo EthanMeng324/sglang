@@ -126,6 +126,10 @@ class LayerwiseOffloadManager:
         self.phase_name_to_idx = {
             spec.name: phase_idx for phase_idx, spec in enumerate(self.phase_specs)
         }
+        self._phase_name_to_span: Dict[str, Tuple[int, int]] = {
+            spec.name: (phase_idx, phase_idx)
+            for phase_idx, spec in enumerate(self.phase_specs)
+        }
         self._requested_resident_phase_names = set(resident_phase_names or set())
         self.resident_phase_names = {
             name for name in self._requested_resident_phase_names if name in self.phase_name_to_idx
@@ -295,7 +299,6 @@ class LayerwiseOffloadManager:
             )
 
         effective_phase_specs: List[PhaseSpec] = []
-        barrier_phase_name_to_idx: Dict[str, int] = {}
         coarse_phase_name_to_phase_ids: Dict[str, Set[int]] = {}
         relative_name_to_phase_idx: Dict[str, int] = {}
 
@@ -303,9 +306,7 @@ class LayerwiseOffloadManager:
             coarse_name: str, bucket_idx: int, bucket_relative_names: List[str]
         ) -> None:
             effective_idx = len(effective_phase_specs)
-            effective_name = (
-                coarse_name if bucket_idx == 0 and len(bucket_relative_names) == 1 else f"{coarse_name}@{bucket_idx}"
-            )
+            effective_name = f"{coarse_name}@{bucket_idx}"
             effective_phase_specs.append(
                 PhaseSpec(name=effective_name, prefixes=tuple(bucket_relative_names))
             )
@@ -314,7 +315,6 @@ class LayerwiseOffloadManager:
             coarse_phase_name_to_phase_ids.setdefault(coarse_name, set()).add(
                 effective_idx
             )
-            barrier_phase_name_to_idx[coarse_name] = effective_idx
 
         for coarse_phase_idx, coarse_spec in enumerate(self._coarse_phase_specs):
             bucket_relative_names: List[str] = []
@@ -344,7 +344,14 @@ class LayerwiseOffloadManager:
         self.phase_name_to_idx = {
             spec.name: phase_idx for phase_idx, spec in enumerate(self.phase_specs)
         }
-        self.phase_name_to_idx.update(barrier_phase_name_to_idx)
+        self._phase_name_to_span = {
+            spec.name: (phase_idx, phase_idx)
+            for phase_idx, spec in enumerate(self.phase_specs)
+        }
+        for coarse_name, phase_ids in coarse_phase_name_to_phase_ids.items():
+            if not phase_ids:
+                continue
+            self._phase_name_to_span[coarse_name] = (min(phase_ids), max(phase_ids))
         self.phase_prefetch_depth = min(
             max(1, self.phase_prefetch_depth), len(self.phase_specs)
         )
@@ -417,7 +424,10 @@ class LayerwiseOffloadManager:
             return 0
         if not self._coarse_phase_specs:
             return 0
-        return int(self.phase_name_to_idx.get(self._coarse_phase_specs[0].name, 0))
+        entry_span = self._phase_name_to_span.get(self._coarse_phase_specs[0].name)
+        if entry_span is None:
+            return 0
+        return int(entry_span[1])
 
     def _phase_is_resident(self, phase_idx: int) -> bool:
         return phase_idx in self._resident_phase_ids
@@ -1762,24 +1772,25 @@ class LayerwiseOffloadManager:
                 yield name, cpu_buffer[offset : offset + numel].reshape(shape)
 
     def supports_phase_name(self, phase_name: str) -> bool:
-        return phase_name in self.phase_name_to_idx
+        return phase_name in self._phase_name_to_span
 
     @torch.compiler.disable
     def ensure_named_phase_ready(self, layer_idx: int, phase_name: str) -> None:
-        phase_idx = self.phase_name_to_idx.get(phase_name)
-        if phase_idx is None:
+        phase_span = self._phase_name_to_span.get(phase_name)
+        if phase_span is None:
             return
+        keep_from_phase_idx, target_phase_idx = phase_span
 
         with self._state_lock:
-            self._evict_completed_phases_before_locked(layer_idx, phase_idx)
+            self._evict_completed_phases_before_locked(layer_idx, keep_from_phase_idx)
 
         step_idx = self._current_profile_step_idx()
         waited_bytes, total_bytes = self._estimate_waited_prefetch_bytes(
-            layer_idx, phase_idx
+            layer_idx, target_phase_idx
         )
         self._record_waited_prefetch_bytes(step_idx, waited_bytes, total_bytes)
         wait_start = self._record_prefetch_cp_wait_start()
-        self._ensure_phase_ready(layer_idx, target_phase_idx=phase_idx)
+        self._ensure_phase_ready(layer_idx, target_phase_idx=target_phase_idx)
         self._record_prefetch_cp_wait_end(step_idx, layer_idx, wait_start)
 
     def register_forward_hooks(self) -> None:
