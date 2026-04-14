@@ -275,14 +275,22 @@ class LayerwiseOffloadManager:
     def _apply_ratio_based_phase_policy(
         self, aggregated_phase_bytes: Dict[int, int]
     ) -> None:
-        if self.resident_phase_ratio is not None:
-            ratio_phase_ids = self._derive_phase_prefix_by_ratio(
-                aggregated_phase_bytes, self.resident_phase_ratio
-            )
-            self._resident_phase_ids |= ratio_phase_ids
-            self.resident_phase_names = {
-                self.phase_specs[idx].name for idx in sorted(self._resident_phase_ids)
-            }
+        if self.resident_phase_ratio is None:
+            return
+        if not self._auto_bucket_phases:
+            # In the simplified resident-ratio path (phase-aware disabled), the
+            # ratio is implemented as a per-layer tensor prefix, not as a phase
+            # prefix. Applying it to the single coarse "layer" phase would
+            # accidentally make the whole layer resident.
+            return
+
+        ratio_phase_ids = self._derive_phase_prefix_by_ratio(
+            aggregated_phase_bytes, self.resident_phase_ratio
+        )
+        self._resident_phase_ids |= ratio_phase_ids
+        self.resident_phase_names = {
+            self.phase_specs[idx].name for idx in sorted(self._resident_phase_ids)
+        }
 
     def _build_effective_bucket_phases(
         self,
