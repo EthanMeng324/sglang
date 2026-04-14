@@ -164,7 +164,7 @@ class LayerwiseOffloadManager:
         )
         self._unmatched_phase_suffixes: Set[str] = set()
 
-        # layer_idx -> {phase_idx: {dtype: consolidated pinned CPU buffer}}
+        # layer_idx -> {phase_idx: {dtype: consolidated pinned CPU buffer for pageable tensors only}}
         self._consolidated_cpu_weights: Dict[
             int, Dict[int, Dict[torch.dtype, torch.Tensor]]
         ] = {}
@@ -174,7 +174,11 @@ class LayerwiseOffloadManager:
         self._phase_total_bytes: Dict[int, Dict[int, int]] = {}
         # layer_idx -> {phase_idx: resident_bytes_kept_on_gpu}
         self._resident_phase_total_bytes: Dict[int, Dict[int, int]] = {}
+        # layer_idx -> {name: CPU shadow tensor for resident weights}
+        self._resident_cpu_weights: Dict[int, Dict[str, torch.Tensor]] = {}
         # layer_idx -> {name: {dtype, phase_id, offset, numel, shape, resident}}
+        # Resident tensors keep a separate CPU shadow and are excluded from
+        # consolidated pageable buffers / prefetch completion accounting.
         self._weight_metadata: Dict[int, Dict[str, Dict[str, Any]]] = {}
 
         # layer_idx -> {phase_idx: {dtype: phase-sized GPU buffer}}
@@ -470,6 +474,15 @@ class LayerwiseOffloadManager:
 
     def _phase_prefetch_bytes(self, layer_idx: int, phase_idx: int) -> int:
         return int(self._phase_total_bytes.get(layer_idx, {}).get(phase_idx, 0))
+
+    def _layer_has_resident_tensors(self, layer_idx: int) -> bool:
+        return any(
+            int(phase_bytes) > 0
+            for phase_bytes in self._resident_phase_total_bytes.get(layer_idx, {}).values()
+        )
+
+    def _resident_cpu_tensor(self, layer_idx: int, name: str) -> torch.Tensor | None:
+        return self._resident_cpu_weights.get(layer_idx, {}).get(name)
 
     def _initial_entry_target_phase_idx(self) -> int:
         if not self.phase_specs:
@@ -1498,6 +1511,7 @@ class LayerwiseOffloadManager:
         # 2. concat and offload (in pinned memory)
         for layer_idx, phase_to_dtype_params in layer_groups.items():
             self._consolidated_cpu_weights[layer_idx] = {}
+            self._resident_cpu_weights[layer_idx] = {}
             self._weight_metadata[layer_idx] = {}
             self._layer_total_bytes[layer_idx] = 0
             self._phase_total_bytes[layer_idx] = {
@@ -1512,23 +1526,14 @@ class LayerwiseOffloadManager:
                 resident_phase = self._phase_is_resident(phase_idx)
 
                 for dtype, weights in dtype_to_params.items():
-                    total_numel = sum(t.numel() for _, t in weights)
-                    cpu_buffer = torch.empty(
-                        total_numel,
-                        dtype=dtype,
-                        pin_memory=self.pin_cpu_memory,
-                    )
-
+                    pageable_weights: List[Tuple[str, torch.Tensor, str]] = []
                     current_offset = 0
                     for name, weight in weights:
-                        numel = weight.numel()
                         relative_name = self._relative_name_after_layer(name) or ""
                         resident_tensor = resident_phase or (
                             relative_name in self._resident_relative_names
                         )
-                        cpu_buffer[current_offset : current_offset + numel].copy_(
-                            weight.flatten()
-                        )
+                        numel = weight.numel()
                         self._weight_metadata[layer_idx][name] = {
                             "dtype": dtype,
                             "phase_id": phase_idx,
@@ -1543,17 +1548,45 @@ class LayerwiseOffloadManager:
                             self._resident_phase_total_bytes[layer_idx][phase_idx] += (
                                 tensor_bytes
                             )
+                            resident_cpu_tensor = torch.empty(
+                                weight.shape,
+                                dtype=dtype,
+                                pin_memory=self.pin_cpu_memory,
+                            )
+                            resident_cpu_tensor.copy_(weight)
+                            self._resident_cpu_weights[layer_idx][
+                                name
+                            ] = resident_cpu_tensor
                         else:
+                            pageable_weights.append((name, weight, relative_name))
                             self._layer_total_bytes[layer_idx] += tensor_bytes
                             self._phase_total_bytes[layer_idx][phase_idx] += (
                                 tensor_bytes
                             )
-                            weight.data = self._placeholder_tensor(dtype)
+                            current_offset += numel
+
+                    total_numel = sum(t.numel() for _, t, _ in pageable_weights)
+                    if total_numel <= 0:
+                        continue
+
+                    cpu_buffer = torch.empty(
+                        total_numel,
+                        dtype=dtype,
+                        pin_memory=self.pin_cpu_memory,
+                    )
+                    current_offset = 0
+                    for name, weight, _relative_name in pageable_weights:
+                        numel = weight.numel()
+                        cpu_buffer[current_offset : current_offset + numel].copy_(
+                            weight.flatten()
+                        )
+                        self._weight_metadata[layer_idx][name]["offset"] = current_offset
+                        weight.data = self._placeholder_tensor(dtype)
                         current_offset += numel
 
-                    self._consolidated_cpu_weights[layer_idx][phase_idx][
-                        dtype
-                    ] = cpu_buffer
+                    self._consolidated_cpu_weights[layer_idx][phase_idx][dtype] = (
+                        cpu_buffer
+                    )
 
             with self._state_lock:
                 if self._layer_complete_locked(layer_idx):
@@ -1776,9 +1809,14 @@ class LayerwiseOffloadManager:
     @torch.compiler.disable
     def sync_layer_to_cpu(self, layer_idx: int) -> None:
         """Sync a layer's weights from GPU back to CPU."""
-        if not self.enabled or layer_idx not in self._gpu_layers:
+        if not self.enabled:
             return
-        if layer_idx not in self._consolidated_cpu_weights:
+        if (
+            layer_idx not in self._gpu_layers
+            and not self._layer_has_resident_tensors(layer_idx)
+        ):
+            return
+        if layer_idx not in self._weight_metadata:
             return
 
         if self.copy_stream is not None:
@@ -1786,7 +1824,14 @@ class LayerwiseOffloadManager:
 
         for name, meta in self._weight_metadata.get(layer_idx, {}).items():
             phase_idx = int(meta["phase_id"])
-            if not meta.get("resident", False):
+            if meta.get("resident", False):
+                resident_cpu_tensor = self._resident_cpu_tensor(layer_idx, name)
+                if resident_cpu_tensor is None:
+                    continue
+                target = self.get_target_with_name(name)
+                resident_cpu_tensor.copy_(target.data)
+                continue
+            else:
                 with self._state_lock:
                     if not self._phase_materialized_locked(layer_idx, phase_idx):
                         continue
@@ -1807,7 +1852,9 @@ class LayerwiseOffloadManager:
         if self.copy_stream is not None:
             torch.cuda.current_stream().wait_stream(self.copy_stream)
 
-        for layer_idx in list(self._gpu_layers):
+        layer_indices = set(self._gpu_layers)
+        layer_indices.update(self._resident_cpu_weights.keys())
+        for layer_idx in sorted(layer_indices):
             self.sync_layer_to_cpu(layer_idx)
 
     @torch.compiler.disable
@@ -1834,6 +1881,19 @@ class LayerwiseOffloadManager:
                     f"expected={tuple(meta['shape'])}, "
                     f"loaded={tuple(loaded_weight.shape)}"
                 )
+            if meta.get("resident", False):
+                resident_cpu_tensor = self._resident_cpu_tensor(layer_idx, name)
+                if resident_cpu_tensor is not None:
+                    resident_cpu_tensor.copy_(
+                        loaded_weight.to(dtype=resident_cpu_tensor.dtype)
+                    )
+
+                target = self.get_target_with_name(name)
+                target.data.copy_(
+                    loaded_weight.to(device=target.device, dtype=target.dtype)
+                )
+                updated_names.add(name)
+                continue
 
             dtype = meta["dtype"]
             phase_idx = int(meta["phase_id"])
@@ -1860,6 +1920,12 @@ class LayerwiseOffloadManager:
         """Yield (name, tensor) pairs from consolidated CPU buffers."""
         for layer_idx in sorted(self._weight_metadata):
             for name, meta in self._weight_metadata[layer_idx].items():
+                if meta.get("resident", False):
+                    resident_cpu_tensor = self._resident_cpu_tensor(layer_idx, name)
+                    if resident_cpu_tensor is None:
+                        continue
+                    yield name, resident_cpu_tensor
+                    continue
                 dtype = meta["dtype"]
                 phase_idx = int(meta["phase_id"])
                 offset = meta["offset"]
