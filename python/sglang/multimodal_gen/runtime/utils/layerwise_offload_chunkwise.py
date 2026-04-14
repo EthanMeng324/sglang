@@ -118,14 +118,7 @@ class LayerwiseOffloadManager:
         self.phase_prefetch_depth = min(
             max(1, phase_prefetch_depth), len(self.phase_specs)
         )
-        # Only enable internal bucketized phases when the model already exposes
-        # multiple semantic coarse phases. For the ordinary comm-aware path
-        # (phase-aware disabled), resident ratio should keep the simpler
-        # "whole-layer ready before compute" semantics and only choose a
-        # resident tensor prefix within that layer.
-        self._auto_bucket_phases = bool(
-            resident_phase_ratio is not None and len(self._coarse_phase_specs) > 1
-        )
+        self._auto_bucket_phases = resident_phase_ratio is not None
         self._use_record_stream_protection = self._auto_bucket_phases
         self._use_deferred_buffer_release = bool(
             self._auto_bucket_phases
@@ -148,7 +141,6 @@ class LayerwiseOffloadManager:
         }
         self._relative_name_to_phase_idx: Dict[str, int] = {}
         self._coarse_phase_name_to_phase_ids: Dict[str, Set[int]] = {}
-        self._resident_relative_names: Set[str] = set()
         self.enabled = bool(enabled and torch.cuda.is_available())
 
         self.comm_tracker: CommunicationActivityTracker | None = None
@@ -164,7 +156,7 @@ class LayerwiseOffloadManager:
         )
         self._unmatched_phase_suffixes: Set[str] = set()
 
-        # layer_idx -> {phase_idx: {dtype: consolidated pinned CPU buffer for pageable tensors only}}
+        # layer_idx -> {phase_idx: {dtype: consolidated pinned CPU buffer}}
         self._consolidated_cpu_weights: Dict[
             int, Dict[int, Dict[torch.dtype, torch.Tensor]]
         ] = {}
@@ -174,11 +166,7 @@ class LayerwiseOffloadManager:
         self._phase_total_bytes: Dict[int, Dict[int, int]] = {}
         # layer_idx -> {phase_idx: resident_bytes_kept_on_gpu}
         self._resident_phase_total_bytes: Dict[int, Dict[int, int]] = {}
-        # layer_idx -> {name: CPU shadow tensor for resident weights}
-        self._resident_cpu_weights: Dict[int, Dict[str, torch.Tensor]] = {}
         # layer_idx -> {name: {dtype, phase_id, offset, numel, shape, resident}}
-        # Resident tensors keep a separate CPU shadow and are excluded from
-        # consolidated pageable buffers / prefetch completion accounting.
         self._weight_metadata: Dict[int, Dict[str, Dict[str, Any]]] = {}
 
         # layer_idx -> {phase_idx: {dtype: phase-sized GPU buffer}}
@@ -279,22 +267,14 @@ class LayerwiseOffloadManager:
     def _apply_ratio_based_phase_policy(
         self, aggregated_phase_bytes: Dict[int, int]
     ) -> None:
-        if self.resident_phase_ratio is None:
-            return
-        if not self._auto_bucket_phases:
-            # In the simplified resident-ratio path (phase-aware disabled), the
-            # ratio is implemented as a per-layer tensor prefix, not as a phase
-            # prefix. Applying it to the single coarse "layer" phase would
-            # accidentally make the whole layer resident.
-            return
-
-        ratio_phase_ids = self._derive_phase_prefix_by_ratio(
-            aggregated_phase_bytes, self.resident_phase_ratio
-        )
-        self._resident_phase_ids |= ratio_phase_ids
-        self.resident_phase_names = {
-            self.phase_specs[idx].name for idx in sorted(self._resident_phase_ids)
-        }
+        if self.resident_phase_ratio is not None:
+            ratio_phase_ids = self._derive_phase_prefix_by_ratio(
+                aggregated_phase_bytes, self.resident_phase_ratio
+            )
+            self._resident_phase_ids |= ratio_phase_ids
+            self.resident_phase_names = {
+                self.phase_specs[idx].name for idx in sorted(self._resident_phase_ids)
+            }
 
     def _build_effective_bucket_phases(
         self,
@@ -393,46 +373,6 @@ class LayerwiseOffloadManager:
         self._resident_phase_ids = resolved_resident_phase_ids
         self.resident_phase_names = resolved_resident_phase_names
 
-    def _build_resident_tensor_prefix(
-        self,
-        ordered_relative_tensors: Dict[int, List[Tuple[str, int, int]]],
-    ) -> None:
-        if self.resident_phase_ratio is None:
-            return
-        if self._auto_bucket_phases:
-            return
-        if not ordered_relative_tensors:
-            return
-
-        template_layer_idx = min(ordered_relative_tensors)
-        template_tensors = ordered_relative_tensors[template_layer_idx]
-        total_bytes = sum(int(tensor_bytes) for _, tensor_bytes, _ in template_tensors)
-        if total_bytes <= 0:
-            return
-
-        target_bytes = self._quantized_target_bytes(
-            total_bytes, self.resident_phase_ratio
-        )
-        if target_bytes <= 0:
-            return
-
-        selected: Set[str] = set()
-        cumulative = 0
-        for relative_name, tensor_bytes, _phase_idx in template_tensors:
-            selected.add(relative_name)
-            cumulative += int(tensor_bytes)
-            if cumulative >= target_bytes:
-                break
-
-        self._resident_relative_names = selected
-        logger.info(
-            "Layerwise offload resident tensor prefix for %s: tensors=%d target_bytes=%.3f GiB total_bytes=%.3f GiB",
-            self.layers_attr_str,
-            len(selected),
-            target_bytes / (1024**3),
-            total_bytes / (1024**3),
-        )
-
     def _match_layer_idx(self, name: str) -> int | None:
         m = self._layer_name_re.search(name)
         if not m:
@@ -474,15 +414,6 @@ class LayerwiseOffloadManager:
 
     def _phase_prefetch_bytes(self, layer_idx: int, phase_idx: int) -> int:
         return int(self._phase_total_bytes.get(layer_idx, {}).get(phase_idx, 0))
-
-    def _layer_has_resident_tensors(self, layer_idx: int) -> bool:
-        return any(
-            int(phase_bytes) > 0
-            for phase_bytes in self._resident_phase_total_bytes.get(layer_idx, {}).values()
-        )
-
-    def _resident_cpu_tensor(self, layer_idx: int, name: str) -> torch.Tensor | None:
-        return self._resident_cpu_weights.get(layer_idx, {}).get(name)
 
     def _initial_entry_target_phase_idx(self) -> int:
         if not self.phase_specs:
@@ -797,9 +728,11 @@ class LayerwiseOffloadManager:
                     prefetch_buffer_bytes += int(tensor.numel() * tensor.element_size())
 
         resident_phase_bytes = 0
-        for phase_bytes_by_idx in self._resident_phase_total_bytes.values():
-            for phase_bytes in phase_bytes_by_idx.values():
-                resident_phase_bytes += int(phase_bytes)
+        if self._resident_phase_ids:
+            for phase_bytes_by_idx in self._resident_phase_total_bytes.values():
+                for phase_idx, phase_bytes in phase_bytes_by_idx.items():
+                    if phase_idx in self._resident_phase_ids:
+                        resident_phase_bytes += int(phase_bytes)
 
         materialized_layer_count = 0
         materialized_phase_count = 0
@@ -1490,7 +1423,6 @@ class LayerwiseOffloadManager:
             ).append((name, tensor))
 
         self._build_effective_bucket_phases(ordered_relative_tensors)
-        self._build_resident_tensor_prefix(ordered_relative_tensors)
 
         layer_groups = {}
         aggregated_phase_bytes: Dict[int, int] = {
@@ -1511,7 +1443,6 @@ class LayerwiseOffloadManager:
         # 2. concat and offload (in pinned memory)
         for layer_idx, phase_to_dtype_params in layer_groups.items():
             self._consolidated_cpu_weights[layer_idx] = {}
-            self._resident_cpu_weights[layer_idx] = {}
             self._weight_metadata[layer_idx] = {}
             self._layer_total_bytes[layer_idx] = 0
             self._phase_total_bytes[layer_idx] = {
@@ -1526,48 +1457,15 @@ class LayerwiseOffloadManager:
                 resident_phase = self._phase_is_resident(phase_idx)
 
                 for dtype, weights in dtype_to_params.items():
-                    pageable_weights: List[Tuple[str, torch.Tensor, str]] = []
-                    current_offset = 0
-                    for name, weight in weights:
-                        relative_name = self._relative_name_after_layer(name) or ""
-                        resident_tensor = resident_phase or (
-                            relative_name in self._resident_relative_names
+                    total_numel = sum(t.numel() for _, t in weights)
+                    phase_bytes = int(total_numel * weights[0][1].element_size())
+                    if resident_phase:
+                        self._resident_phase_total_bytes[layer_idx][phase_idx] += (
+                            phase_bytes
                         )
-                        numel = weight.numel()
-                        self._weight_metadata[layer_idx][name] = {
-                            "dtype": dtype,
-                            "phase_id": phase_idx,
-                            "resident": resident_tensor,
-                            "offset": current_offset,
-                            "numel": numel,
-                            "shape": weight.shape,
-                        }
-
-                        tensor_bytes = int(numel * weight.element_size())
-                        if resident_tensor:
-                            self._resident_phase_total_bytes[layer_idx][phase_idx] += (
-                                tensor_bytes
-                            )
-                            resident_cpu_tensor = torch.empty(
-                                weight.shape,
-                                dtype=dtype,
-                                pin_memory=self.pin_cpu_memory,
-                            )
-                            resident_cpu_tensor.copy_(weight)
-                            self._resident_cpu_weights[layer_idx][
-                                name
-                            ] = resident_cpu_tensor
-                        else:
-                            pageable_weights.append((name, weight, relative_name))
-                            self._layer_total_bytes[layer_idx] += tensor_bytes
-                            self._phase_total_bytes[layer_idx][phase_idx] += (
-                                tensor_bytes
-                            )
-                            current_offset += numel
-
-                    total_numel = sum(t.numel() for _, t, _ in pageable_weights)
-                    if total_numel <= 0:
-                        continue
+                    else:
+                        self._layer_total_bytes[layer_idx] += phase_bytes
+                        self._phase_total_bytes[layer_idx][phase_idx] += phase_bytes
 
                     cpu_buffer = torch.empty(
                         total_numel,
@@ -1575,18 +1473,27 @@ class LayerwiseOffloadManager:
                         pin_memory=self.pin_cpu_memory,
                     )
                     current_offset = 0
-                    for name, weight, _relative_name in pageable_weights:
+                    for name, weight in weights:
                         numel = weight.numel()
                         cpu_buffer[current_offset : current_offset + numel].copy_(
                             weight.flatten()
                         )
-                        self._weight_metadata[layer_idx][name]["offset"] = current_offset
-                        weight.data = self._placeholder_tensor(dtype)
+                        self._weight_metadata[layer_idx][name] = {
+                            "dtype": dtype,
+                            "phase_id": phase_idx,
+                            "resident": resident_phase,
+                            "offset": current_offset,
+                            "numel": numel,
+                            "shape": weight.shape,
+                        }
+
+                        if not resident_phase:
+                            weight.data = self._placeholder_tensor(dtype)
                         current_offset += numel
 
-                    self._consolidated_cpu_weights[layer_idx][phase_idx][dtype] = (
-                        cpu_buffer
-                    )
+                    self._consolidated_cpu_weights[layer_idx][phase_idx][
+                        dtype
+                    ] = cpu_buffer
 
             with self._state_lock:
                 if self._layer_complete_locked(layer_idx):
@@ -1809,14 +1716,9 @@ class LayerwiseOffloadManager:
     @torch.compiler.disable
     def sync_layer_to_cpu(self, layer_idx: int) -> None:
         """Sync a layer's weights from GPU back to CPU."""
-        if not self.enabled:
+        if not self.enabled or layer_idx not in self._gpu_layers:
             return
-        if (
-            layer_idx not in self._gpu_layers
-            and not self._layer_has_resident_tensors(layer_idx)
-        ):
-            return
-        if layer_idx not in self._weight_metadata:
+        if layer_idx not in self._consolidated_cpu_weights:
             return
 
         if self.copy_stream is not None:
@@ -1824,14 +1726,7 @@ class LayerwiseOffloadManager:
 
         for name, meta in self._weight_metadata.get(layer_idx, {}).items():
             phase_idx = int(meta["phase_id"])
-            if meta.get("resident", False):
-                resident_cpu_tensor = self._resident_cpu_tensor(layer_idx, name)
-                if resident_cpu_tensor is None:
-                    continue
-                target = self.get_target_with_name(name)
-                resident_cpu_tensor.copy_(target.data)
-                continue
-            else:
+            if not meta.get("resident", False):
                 with self._state_lock:
                     if not self._phase_materialized_locked(layer_idx, phase_idx):
                         continue
@@ -1852,9 +1747,7 @@ class LayerwiseOffloadManager:
         if self.copy_stream is not None:
             torch.cuda.current_stream().wait_stream(self.copy_stream)
 
-        layer_indices = set(self._gpu_layers)
-        layer_indices.update(self._resident_cpu_weights.keys())
-        for layer_idx in sorted(layer_indices):
+        for layer_idx in list(self._gpu_layers):
             self.sync_layer_to_cpu(layer_idx)
 
     @torch.compiler.disable
@@ -1881,20 +1774,6 @@ class LayerwiseOffloadManager:
                     f"expected={tuple(meta['shape'])}, "
                     f"loaded={tuple(loaded_weight.shape)}"
                 )
-            if meta.get("resident", False):
-                resident_cpu_tensor = self._resident_cpu_tensor(layer_idx, name)
-                if resident_cpu_tensor is not None:
-                    resident_cpu_tensor.copy_(
-                        loaded_weight.to(dtype=resident_cpu_tensor.dtype)
-                    )
-
-                target = self.get_target_with_name(name)
-                target.data.copy_(
-                    loaded_weight.to(device=target.device, dtype=target.dtype)
-                )
-                updated_names.add(name)
-                continue
-
             dtype = meta["dtype"]
             phase_idx = int(meta["phase_id"])
             offset = meta["offset"]
@@ -1920,12 +1799,6 @@ class LayerwiseOffloadManager:
         """Yield (name, tensor) pairs from consolidated CPU buffers."""
         for layer_idx in sorted(self._weight_metadata):
             for name, meta in self._weight_metadata[layer_idx].items():
-                if meta.get("resident", False):
-                    resident_cpu_tensor = self._resident_cpu_tensor(layer_idx, name)
-                    if resident_cpu_tensor is None:
-                        continue
-                    yield name, resident_cpu_tensor
-                    continue
                 dtype = meta["dtype"]
                 phase_idx = int(meta["phase_id"])
                 offset = meta["offset"]
