@@ -85,12 +85,16 @@ fi
 if [[ -n "${DIT_CPU_OFFLOAD_OVERRIDE:-}" ]]; then
     COMMON_FLAGS+=(--dit-cpu-offload "$DIT_CPU_OFFLOAD_OVERRIDE")
 fi
+if [[ -n "${VAE_CPU_OFFLOAD_OVERRIDE:-}" ]]; then
+    COMMON_FLAGS+=(--vae-cpu-offload "$VAE_CPU_OFFLOAD_OVERRIDE")
+fi
 
 DIT_CPU_OFFLOAD_OVERRIDE_DISPLAY="${DIT_CPU_OFFLOAD_OVERRIDE:-<unset>}"
 DIT_CPU_OFFLOAD_FLAG_DISPLAY="default"
 if [[ -n "${DIT_CPU_OFFLOAD_OVERRIDE:-}" ]]; then
     DIT_CPU_OFFLOAD_FLAG_DISPLAY="--dit-cpu-offload ${DIT_CPU_OFFLOAD_OVERRIDE}"
 fi
+VAE_CPU_OFFLOAD_OVERRIDE_DISPLAY="${VAE_CPU_OFFLOAD_OVERRIDE:-<unset>}"
 
 ENABLE_TORCH_COMPILE="${ENABLE_TORCH_COMPILE:-}"
 if [[ -z "$ENABLE_TORCH_COMPILE" ]]; then
@@ -166,6 +170,7 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
     echo "Save artifact: ${PROFILE_SAVE_OUTPUT_ARTIFACTS}"
     echo "DIT_CPU_OFFLOAD_OVERRIDE=${DIT_CPU_OFFLOAD_OVERRIDE_DISPLAY}"
     echo "DIT CPU offload flag: ${DIT_CPU_OFFLOAD_FLAG_DISPLAY}"
+    echo "VAE_CPU_OFFLOAD_OVERRIDE=${VAE_CPU_OFFLOAD_OVERRIDE_DISPLAY}"
     echo "Server port override: ${SERVER_PORT_OVERRIDE:-<default>}"
     echo "Scheduler port override: ${SCHEDULER_PORT_OVERRIDE:-<default>}"
     echo "Master port override: ${MASTER_PORT_OVERRIDE:-<default>}"
@@ -193,6 +198,7 @@ echo "Artifact: $(format_output_display_path "$VIDEO_OUT" "$NUM_OUTPUTS_PER_PROM
 echo "Save artifact: ${PROFILE_SAVE_OUTPUT_ARTIFACTS}"
 echo "DIT_CPU_OFFLOAD_OVERRIDE=${DIT_CPU_OFFLOAD_OVERRIDE_DISPLAY}"
 echo "DIT CPU offload flag: ${DIT_CPU_OFFLOAD_FLAG_DISPLAY}"
+echo "VAE_CPU_OFFLOAD_OVERRIDE=${VAE_CPU_OFFLOAD_OVERRIDE_DISPLAY}"
 echo "Server port override: ${SERVER_PORT_OVERRIDE:-<default>}"
 echo "Scheduler port override: ${SCHEDULER_PORT_OVERRIDE:-<default>}"
 echo "Master port override: ${MASTER_PORT_OVERRIDE:-<default>}"

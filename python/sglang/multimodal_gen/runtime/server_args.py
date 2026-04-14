@@ -1132,9 +1132,9 @@ class ServerArgs:
                 )
                 self.use_fsdp_inference = False
 
-            if self.dit_cpu_offload is not False:
+            if self.dit_cpu_offload is None:
                 logger.warning(
-                    "dit_layerwise_offload is enabled, overriding dit_cpu_offload=False."
+                    "dit_layerwise_offload is enabled, automatically disabling dit_cpu_offload."
                 )
                 self.dit_cpu_offload = False
 

@@ -79,6 +79,9 @@ fi
 if [[ -n "${DIT_CPU_OFFLOAD_OVERRIDE:-}" ]]; then
     COMMON_FLAGS+=(--dit-cpu-offload "$DIT_CPU_OFFLOAD_OVERRIDE")
 fi
+if [[ -n "${VAE_CPU_OFFLOAD_OVERRIDE:-}" ]]; then
+    COMMON_FLAGS+=(--vae-cpu-offload "$VAE_CPU_OFFLOAD_OVERRIDE")
+fi
 
 ENABLE_TORCH_COMPILE="${ENABLE_TORCH_COMPILE:-}"
 if [[ -z "$ENABLE_TORCH_COMPILE" ]]; then
@@ -142,6 +145,8 @@ echo "Save artifact: ${PROFILE_SAVE_OUTPUT_ARTIFACTS}"
 if [[ "$PROFILE_MODE" == "ratio" ]]; then
     echo "Resident ratio: ${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO}"
 fi
+echo "DIT_CPU_OFFLOAD_OVERRIDE=${DIT_CPU_OFFLOAD_OVERRIDE:-<unset>}"
+echo "VAE_CPU_OFFLOAD_OVERRIDE=${VAE_CPU_OFFLOAD_OVERRIDE:-<unset>}"
 echo "Force diffusers timestep embedding: ${SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING:-0}"
 echo "Mock PCIe config: enabled=${SGLANG_WAN_MOCK_COMM_ENABLE}, pcie_mb=${SGLANG_WAN_MOCK_COMM_PCIE_MB}, every_n_blocks=${SGLANG_WAN_MOCK_COMM_EVERY_N_BLOCKS}, comm_aware=${SGLANG_DIT_COMM_AWARE_OFFLOAD}"
 

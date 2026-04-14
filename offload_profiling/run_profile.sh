@@ -96,6 +96,8 @@ WARMUP_MASTER_PORT="${WARMUP_MASTER_PORT:-30170}"
 WARMUP_COOLDOWN_SEC="${WARMUP_COOLDOWN_SEC:-5}"
 TIMELINE_LOG_PATH="${TIMELINE_LOG_PATH:-}"
 RESIDENT_RATIO_EFFECTIVE="${RESIDENT_RATIO_OVERRIDE:-${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO:-0.4}}"
+DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE="${PROFILE_DIT_CPU_OFFLOAD:-${DIT_CPU_OFFLOAD_OVERRIDE:-true}}"
+VAE_CPU_OFFLOAD_EFFECTIVE="${PROFILE_VAE_CPU_OFFLOAD:-${VAE_CPU_OFFLOAD_OVERRIDE:-true}}"
 
 normalize_step_name() {
     local raw="$1"
@@ -187,6 +189,10 @@ echo "Num frames : ${NUM_FRAMES_OVERRIDE:-default}"
 echo "Batch size : ${BATCH_SIZE_OVERRIDE:-default}"
 echo "Steps      : $(IFS=,; echo "${SELECTED_STEPS_DISPLAY[*]}")"
 echo "Resident ratio  : ${RESIDENT_RATIO_EFFECTIVE}"
+if profile_model_is_image; then
+    echo "DiT CPU offload : ${DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE}"
+    echo "VAE CPU offload : ${VAE_CPU_OFFLOAD_EFFECTIVE}"
+fi
 echo "Start      : $(date)"
 echo ""
 
@@ -224,37 +230,69 @@ run_step_with_env() {
 }
 
 if [[ "$RUN_WARMUP" == "1" ]]; then
-    run_step_with_env "Warmup Dry Run" "run_access_no.sh" \
-        DRY_RUN=1 \
-        DIT_CPU_OFFLOAD_OVERRIDE=false \
-        SERVER_PORT_OVERRIDE="$WARMUP_SERVER_PORT" \
-        SCHEDULER_PORT_OVERRIDE="$WARMUP_SCHEDULER_PORT" \
-        MASTER_PORT_OVERRIDE="$WARMUP_MASTER_PORT" \
-        NUM_INFERENCE_STEPS="$WARMUP_NUM_INFERENCE_STEPS"
+    if profile_model_is_image; then
+        run_step_with_env "Warmup Dry Run" "run_access_no.sh" \
+            DRY_RUN=1 \
+            DIT_CPU_OFFLOAD_OVERRIDE="$DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE" \
+            VAE_CPU_OFFLOAD_OVERRIDE="$VAE_CPU_OFFLOAD_EFFECTIVE" \
+            SERVER_PORT_OVERRIDE="$WARMUP_SERVER_PORT" \
+            SCHEDULER_PORT_OVERRIDE="$WARMUP_SCHEDULER_PORT" \
+            MASTER_PORT_OVERRIDE="$WARMUP_MASTER_PORT" \
+            NUM_INFERENCE_STEPS="$WARMUP_NUM_INFERENCE_STEPS"
+    else
+        run_step_with_env "Warmup Dry Run" "run_access_no.sh" \
+            DRY_RUN=1 \
+            SERVER_PORT_OVERRIDE="$WARMUP_SERVER_PORT" \
+            SCHEDULER_PORT_OVERRIDE="$WARMUP_SCHEDULER_PORT" \
+            MASTER_PORT_OVERRIDE="$WARMUP_MASTER_PORT" \
+            NUM_INFERENCE_STEPS="$WARMUP_NUM_INFERENCE_STEPS"
+    fi
     if [[ "$RUN_NO" == "1" || "$RUN_OLD" == "1" || "$RUN_NEW" == "1" || "$RUN_RATIO" == "1" ]]; then
         timeline_log "cooldown_start" "warmup" "sleep=${WARMUP_COOLDOWN_SEC}"
         sleep "$WARMUP_COOLDOWN_SEC"
         timeline_log "cooldown_end" "warmup" "sleep=${WARMUP_COOLDOWN_SEC}"
     fi
 fi
-if [[ "$RUN_NO" == "1" ]]; then
-    run_step_with_env "No Offload" "run_access_no.sh" \
-        DIT_CPU_OFFLOAD_OVERRIDE=false
-fi
-if [[ "$RUN_OLD" == "1" ]]; then
-    run_step_with_env "Old Offload" "run_access_old.sh" \
-        DIT_CPU_OFFLOAD_OVERRIDE=false
-fi
-if [[ "$RUN_NEW" == "1" ]]; then
-    run_step_with_env "Comm-Aware Offload" "run_access.sh" \
-        DIT_CPU_OFFLOAD_OVERRIDE=false \
-        SGLANG_DIT_OFFLOAD_RESIDENT_RATIO= \
-        SGLANG_DIT_PHASE_AWARE_PREFETCH=0
-fi
-if [[ "$RUN_RATIO" == "1" ]]; then
-    run_step_with_env "Ratio-Resident Offload" "run_access_phase.sh" \
-        DIT_CPU_OFFLOAD_OVERRIDE=false \
-        SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="$RESIDENT_RATIO_EFFECTIVE"
+if profile_model_is_image; then
+    if [[ "$RUN_NO" == "1" ]]; then
+        run_step_with_env "No Offload" "run_access_no.sh" \
+            DIT_CPU_OFFLOAD_OVERRIDE="$DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE" \
+            VAE_CPU_OFFLOAD_OVERRIDE="$VAE_CPU_OFFLOAD_EFFECTIVE"
+    fi
+    if [[ "$RUN_OLD" == "1" ]]; then
+        run_step_with_env "Old Offload" "run_access_old.sh" \
+            DIT_CPU_OFFLOAD_OVERRIDE="$DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE" \
+            VAE_CPU_OFFLOAD_OVERRIDE="$VAE_CPU_OFFLOAD_EFFECTIVE"
+    fi
+    if [[ "$RUN_NEW" == "1" ]]; then
+        run_step_with_env "Comm-Aware Offload" "run_access.sh" \
+            DIT_CPU_OFFLOAD_OVERRIDE="$DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE" \
+            VAE_CPU_OFFLOAD_OVERRIDE="$VAE_CPU_OFFLOAD_EFFECTIVE" \
+            SGLANG_DIT_OFFLOAD_RESIDENT_RATIO= \
+            SGLANG_DIT_PHASE_AWARE_PREFETCH=0
+    fi
+    if [[ "$RUN_RATIO" == "1" ]]; then
+        run_step_with_env "Ratio-Resident Offload" "run_access_phase.sh" \
+            DIT_CPU_OFFLOAD_OVERRIDE="$DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE" \
+            VAE_CPU_OFFLOAD_OVERRIDE="$VAE_CPU_OFFLOAD_EFFECTIVE" \
+            SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="$RESIDENT_RATIO_EFFECTIVE"
+    fi
+else
+    if [[ "$RUN_NEW" == "1" ]]; then
+        run_step_with_env "Comm-Aware Offload" "run_access.sh" \
+            SGLANG_DIT_OFFLOAD_RESIDENT_RATIO= \
+            SGLANG_DIT_PHASE_AWARE_PREFETCH=0
+    fi
+    if [[ "$RUN_RATIO" == "1" ]]; then
+        run_step_with_env "Ratio-Resident Offload" "run_access_phase.sh" \
+            SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="$RESIDENT_RATIO_EFFECTIVE"
+    fi
+    if [[ "$RUN_NO" == "1" ]]; then
+        run_step "No Offload" "run_access_no.sh"
+    fi
+    if [[ "$RUN_OLD" == "1" ]]; then
+        run_step "Old Offload" "run_access_old.sh"
+    fi
 fi
 if [[ "$RUN_ANALYZE" == "1" ]]; then
     run_step "Analyze NSYS" "analyze_nsys.sh"
