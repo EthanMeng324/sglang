@@ -11,7 +11,7 @@ usage() {
     cat <<'EOF'
 Usage:
   bash offload_profiling/run_profile_dmon.sh <model> [num_frames]
-  bash offload_profiling/run_profile_dmon.sh --model <model> [--num-frames <n>] [--batch-size <n>] [--resident-ratio <r>] [--steps <csv>]
+  bash offload_profiling/run_profile_dmon.sh --model <model> [--num-frames <n>] [--batch-size <n>] [--resident-ratio <r>] [--vae-precision <p>] [--steps <csv>]
 
 Supported models:
   wanvideo
@@ -46,6 +46,7 @@ PROFILE_MODEL="${PROFILE_MODEL:-}"
 NUM_FRAMES_OVERRIDE="${NUM_FRAMES:-}"
 BATCH_SIZE_OVERRIDE="${BATCH_SIZE:-${NUM_OUTPUTS_PER_PROMPT:-}}"
 RESIDENT_RATIO_OVERRIDE="${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO:-}"
+VAE_PRECISION_OVERRIDE="${PROFILE_VAE_PRECISION:-${VAE_PRECISION_OVERRIDE:-}}"
 PROFILE_STEPS_OVERRIDE="${PROFILE_STEPS:-}"
 
 while [[ $# -gt 0 ]]; do
@@ -64,6 +65,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --resident-ratio)
             RESIDENT_RATIO_OVERRIDE="$2"
+            shift 2
+            ;;
+        --vae-precision)
+            VAE_PRECISION_OVERRIDE="$2"
             shift 2
             ;;
         --steps)
@@ -97,6 +102,9 @@ if [[ -n "${NUM_FRAMES_OVERRIDE:-}" ]]; then
 fi
 if [[ -n "${BATCH_SIZE_OVERRIDE:-}" ]]; then
     export NUM_OUTPUTS_PER_PROMPT="$BATCH_SIZE_OVERRIDE"
+fi
+if [[ -n "${VAE_PRECISION_OVERRIDE:-}" ]]; then
+    export PROFILE_VAE_PRECISION="$VAE_PRECISION_OVERRIDE"
 fi
 
 resolve_profile_model no "$PROFILE_MODEL" >/dev/null

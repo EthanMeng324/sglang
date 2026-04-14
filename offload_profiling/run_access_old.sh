@@ -76,6 +76,9 @@ fi
 if [[ -n "${VAE_CPU_OFFLOAD_OVERRIDE:-}" ]]; then
     COMMON_FLAGS+=(--vae-cpu-offload "$VAE_CPU_OFFLOAD_OVERRIDE")
 fi
+if [[ -n "${VAE_PRECISION_OVERRIDE:-}" ]]; then
+    COMMON_FLAGS+=(--vae-precision "$VAE_PRECISION_OVERRIDE")
+fi
 
 ENABLE_TORCH_COMPILE="${ENABLE_TORCH_COMPILE:-}"
 if [[ -z "$ENABLE_TORCH_COMPILE" ]]; then
@@ -127,6 +130,7 @@ echo "Artifact: $(format_output_display_path "$VIDEO_OUT" "$NUM_OUTPUTS_PER_PROM
 echo "Save artifact: ${PROFILE_SAVE_OUTPUT_ARTIFACTS}"
 echo "DIT_CPU_OFFLOAD_OVERRIDE=${DIT_CPU_OFFLOAD_OVERRIDE:-<unset>}"
 echo "VAE_CPU_OFFLOAD_OVERRIDE=${VAE_CPU_OFFLOAD_OVERRIDE:-<unset>}"
+echo "VAE_PRECISION_OVERRIDE=${VAE_PRECISION_OVERRIDE:-<unset>}"
 echo "Force diffusers timestep embedding: ${SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING:-0}"
 echo "Mock PCIe config: enabled=${SGLANG_WAN_MOCK_COMM_ENABLE}, pcie_mb=${SGLANG_WAN_MOCK_COMM_PCIE_MB}, every_n_blocks=${SGLANG_WAN_MOCK_COMM_EVERY_N_BLOCKS}, comm_aware=0"
 

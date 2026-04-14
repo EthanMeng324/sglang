@@ -8,7 +8,7 @@ usage() {
     cat <<'EOF'
 Usage:
   bash offload_profiling/run_profile.sh <model> [num_frames]
-  bash offload_profiling/run_profile.sh --model <model> [--num-frames <n>] [--batch-size <n>] [--resident-ratio <r>] [--steps <csv>]
+  bash offload_profiling/run_profile.sh --model <model> [--num-frames <n>] [--batch-size <n>] [--resident-ratio <r>] [--vae-precision <p>] [--steps <csv>]
 
 Supported models:
   wanvideo
@@ -34,6 +34,7 @@ PROFILE_MODEL="${PROFILE_MODEL:-}"
 NUM_FRAMES_OVERRIDE="${NUM_FRAMES:-}"
 BATCH_SIZE_OVERRIDE="${BATCH_SIZE:-${NUM_OUTPUTS_PER_PROMPT:-}}"
 RESIDENT_RATIO_OVERRIDE="${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO:-}"
+VAE_PRECISION_OVERRIDE="${PROFILE_VAE_PRECISION:-${VAE_PRECISION_OVERRIDE:-}}"
 PROFILE_STEPS_OVERRIDE="${PROFILE_STEPS:-all}"
 
 while [[ $# -gt 0 ]]; do
@@ -52,6 +53,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --resident-ratio)
             RESIDENT_RATIO_OVERRIDE="$2"
+            shift 2
+            ;;
+        --vae-precision)
+            VAE_PRECISION_OVERRIDE="$2"
             shift 2
             ;;
         --steps)
@@ -98,6 +103,7 @@ TIMELINE_LOG_PATH="${TIMELINE_LOG_PATH:-}"
 RESIDENT_RATIO_EFFECTIVE="${RESIDENT_RATIO_OVERRIDE:-${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO:-0.4}}"
 DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE="${PROFILE_DIT_CPU_OFFLOAD:-${DIT_CPU_OFFLOAD_OVERRIDE:-true}}"
 VAE_CPU_OFFLOAD_EFFECTIVE="${PROFILE_VAE_CPU_OFFLOAD:-${VAE_CPU_OFFLOAD_OVERRIDE:-true}}"
+VAE_PRECISION_EFFECTIVE="${VAE_PRECISION_OVERRIDE:-}"
 
 normalize_step_name() {
     local raw="$1"
@@ -193,6 +199,7 @@ if profile_model_is_image; then
     echo "DiT CPU offload : ${DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE}"
     echo "VAE CPU offload : ${VAE_CPU_OFFLOAD_EFFECTIVE}"
 fi
+echo "VAE precision : ${VAE_PRECISION_EFFECTIVE:-default}"
 echo "Start      : $(date)"
 echo ""
 
@@ -235,6 +242,7 @@ if [[ "$RUN_WARMUP" == "1" ]]; then
             DRY_RUN=1 \
             DIT_CPU_OFFLOAD_OVERRIDE="$DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE" \
             VAE_CPU_OFFLOAD_OVERRIDE="$VAE_CPU_OFFLOAD_EFFECTIVE" \
+            VAE_PRECISION_OVERRIDE="$VAE_PRECISION_EFFECTIVE" \
             SERVER_PORT_OVERRIDE="$WARMUP_SERVER_PORT" \
             SCHEDULER_PORT_OVERRIDE="$WARMUP_SCHEDULER_PORT" \
             MASTER_PORT_OVERRIDE="$WARMUP_MASTER_PORT" \
@@ -257,17 +265,20 @@ if profile_model_is_image; then
     if [[ "$RUN_NO" == "1" ]]; then
         run_step_with_env "No Offload" "run_access_no.sh" \
             DIT_CPU_OFFLOAD_OVERRIDE="$DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE" \
-            VAE_CPU_OFFLOAD_OVERRIDE="$VAE_CPU_OFFLOAD_EFFECTIVE"
+            VAE_CPU_OFFLOAD_OVERRIDE="$VAE_CPU_OFFLOAD_EFFECTIVE" \
+            VAE_PRECISION_OVERRIDE="$VAE_PRECISION_EFFECTIVE"
     fi
     if [[ "$RUN_OLD" == "1" ]]; then
         run_step_with_env "Old Offload" "run_access_old.sh" \
             DIT_CPU_OFFLOAD_OVERRIDE="$DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE" \
-            VAE_CPU_OFFLOAD_OVERRIDE="$VAE_CPU_OFFLOAD_EFFECTIVE"
+            VAE_CPU_OFFLOAD_OVERRIDE="$VAE_CPU_OFFLOAD_EFFECTIVE" \
+            VAE_PRECISION_OVERRIDE="$VAE_PRECISION_EFFECTIVE"
     fi
     if [[ "$RUN_NEW" == "1" ]]; then
         run_step_with_env "Comm-Aware Offload" "run_access.sh" \
             DIT_CPU_OFFLOAD_OVERRIDE="$DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE" \
             VAE_CPU_OFFLOAD_OVERRIDE="$VAE_CPU_OFFLOAD_EFFECTIVE" \
+            VAE_PRECISION_OVERRIDE="$VAE_PRECISION_EFFECTIVE" \
             SGLANG_DIT_OFFLOAD_RESIDENT_RATIO= \
             SGLANG_DIT_PHASE_AWARE_PREFETCH=0
     fi
@@ -275,23 +286,28 @@ if profile_model_is_image; then
         run_step_with_env "Ratio-Resident Offload" "run_access_phase.sh" \
             DIT_CPU_OFFLOAD_OVERRIDE="$DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE" \
             VAE_CPU_OFFLOAD_OVERRIDE="$VAE_CPU_OFFLOAD_EFFECTIVE" \
+            VAE_PRECISION_OVERRIDE="$VAE_PRECISION_EFFECTIVE" \
             SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="$RESIDENT_RATIO_EFFECTIVE"
     fi
 else
     if [[ "$RUN_NEW" == "1" ]]; then
         run_step_with_env "Comm-Aware Offload" "run_access.sh" \
+            VAE_PRECISION_OVERRIDE="$VAE_PRECISION_EFFECTIVE" \
             SGLANG_DIT_OFFLOAD_RESIDENT_RATIO= \
             SGLANG_DIT_PHASE_AWARE_PREFETCH=0
     fi
     if [[ "$RUN_RATIO" == "1" ]]; then
         run_step_with_env "Ratio-Resident Offload" "run_access_phase.sh" \
+            VAE_PRECISION_OVERRIDE="$VAE_PRECISION_EFFECTIVE" \
             SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="$RESIDENT_RATIO_EFFECTIVE"
     fi
     if [[ "$RUN_NO" == "1" ]]; then
-        run_step "No Offload" "run_access_no.sh"
+        run_step_with_env "No Offload" "run_access_no.sh" \
+            VAE_PRECISION_OVERRIDE="$VAE_PRECISION_EFFECTIVE"
     fi
     if [[ "$RUN_OLD" == "1" ]]; then
-        run_step "Old Offload" "run_access_old.sh"
+        run_step_with_env "Old Offload" "run_access_old.sh" \
+            VAE_PRECISION_OVERRIDE="$VAE_PRECISION_EFFECTIVE"
     fi
 fi
 if [[ "$RUN_ANALYZE" == "1" ]]; then
