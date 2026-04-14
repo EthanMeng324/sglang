@@ -224,64 +224,37 @@ run_step_with_env() {
 }
 
 if [[ "$RUN_WARMUP" == "1" ]]; then
-    if profile_model_is_image; then
-        run_step_with_env "Warmup Dry Run" "run_access_no.sh" \
-            DRY_RUN=1 \
-            DIT_CPU_OFFLOAD_OVERRIDE=false \
-            SERVER_PORT_OVERRIDE="$WARMUP_SERVER_PORT" \
-            SCHEDULER_PORT_OVERRIDE="$WARMUP_SCHEDULER_PORT" \
-            MASTER_PORT_OVERRIDE="$WARMUP_MASTER_PORT" \
-            NUM_INFERENCE_STEPS="$WARMUP_NUM_INFERENCE_STEPS"
-    else
-        run_step_with_env "Warmup Dry Run" "run_access_no.sh" \
-            DRY_RUN=1 \
-            SERVER_PORT_OVERRIDE="$WARMUP_SERVER_PORT" \
-            SCHEDULER_PORT_OVERRIDE="$WARMUP_SCHEDULER_PORT" \
-            MASTER_PORT_OVERRIDE="$WARMUP_MASTER_PORT" \
-            NUM_INFERENCE_STEPS="$WARMUP_NUM_INFERENCE_STEPS"
-    fi
+    run_step_with_env "Warmup Dry Run" "run_access_no.sh" \
+        DRY_RUN=1 \
+        DIT_CPU_OFFLOAD_OVERRIDE=false \
+        SERVER_PORT_OVERRIDE="$WARMUP_SERVER_PORT" \
+        SCHEDULER_PORT_OVERRIDE="$WARMUP_SCHEDULER_PORT" \
+        MASTER_PORT_OVERRIDE="$WARMUP_MASTER_PORT" \
+        NUM_INFERENCE_STEPS="$WARMUP_NUM_INFERENCE_STEPS"
     if [[ "$RUN_NO" == "1" || "$RUN_OLD" == "1" || "$RUN_NEW" == "1" || "$RUN_RATIO" == "1" ]]; then
         timeline_log "cooldown_start" "warmup" "sleep=${WARMUP_COOLDOWN_SEC}"
         sleep "$WARMUP_COOLDOWN_SEC"
         timeline_log "cooldown_end" "warmup" "sleep=${WARMUP_COOLDOWN_SEC}"
     fi
 fi
-if profile_model_is_image; then
-    if [[ "$RUN_NO" == "1" ]]; then
-        run_step_with_env "No Offload" "run_access_no.sh" \
-            DIT_CPU_OFFLOAD_OVERRIDE=false
-    fi
-    if [[ "$RUN_OLD" == "1" ]]; then
-        run_step_with_env "Old Offload" "run_access_old.sh" \
-            DIT_CPU_OFFLOAD_OVERRIDE=
-    fi
-    if [[ "$RUN_NEW" == "1" ]]; then
-        run_step_with_env "Comm-Aware Offload" "run_access.sh" \
-            DIT_CPU_OFFLOAD_OVERRIDE= \
-            SGLANG_DIT_OFFLOAD_RESIDENT_RATIO= \
-            SGLANG_DIT_PHASE_AWARE_PREFETCH=0
-    fi
-    if [[ "$RUN_RATIO" == "1" ]]; then
-        run_step_with_env "Ratio-Resident Offload" "run_access_phase.sh" \
-            DIT_CPU_OFFLOAD_OVERRIDE= \
-            SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="$RESIDENT_RATIO_EFFECTIVE"
-    fi
-else
-    if [[ "$RUN_NEW" == "1" ]]; then
-        run_step_with_env "Comm-Aware Offload" "run_access.sh" \
-            SGLANG_DIT_OFFLOAD_RESIDENT_RATIO= \
-            SGLANG_DIT_PHASE_AWARE_PREFETCH=0
-    fi
-    if [[ "$RUN_RATIO" == "1" ]]; then
-        run_step_with_env "Ratio-Resident Offload" "run_access_phase.sh" \
-            SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="$RESIDENT_RATIO_EFFECTIVE"
-    fi
-    if [[ "$RUN_NO" == "1" ]]; then
-        run_step "No Offload" "run_access_no.sh"
-    fi
-    if [[ "$RUN_OLD" == "1" ]]; then
-        run_step "Old Offload" "run_access_old.sh"
-    fi
+if [[ "$RUN_NO" == "1" ]]; then
+    run_step_with_env "No Offload" "run_access_no.sh" \
+        DIT_CPU_OFFLOAD_OVERRIDE=false
+fi
+if [[ "$RUN_OLD" == "1" ]]; then
+    run_step_with_env "Old Offload" "run_access_old.sh" \
+        DIT_CPU_OFFLOAD_OVERRIDE=false
+fi
+if [[ "$RUN_NEW" == "1" ]]; then
+    run_step_with_env "Comm-Aware Offload" "run_access.sh" \
+        DIT_CPU_OFFLOAD_OVERRIDE=false \
+        SGLANG_DIT_OFFLOAD_RESIDENT_RATIO= \
+        SGLANG_DIT_PHASE_AWARE_PREFETCH=0
+fi
+if [[ "$RUN_RATIO" == "1" ]]; then
+    run_step_with_env "Ratio-Resident Offload" "run_access_phase.sh" \
+        DIT_CPU_OFFLOAD_OVERRIDE=false \
+        SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="$RESIDENT_RATIO_EFFECTIVE"
 fi
 if [[ "$RUN_ANALYZE" == "1" ]]; then
     run_step "Analyze NSYS" "analyze_nsys.sh"
