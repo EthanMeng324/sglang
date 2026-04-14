@@ -118,7 +118,14 @@ class LayerwiseOffloadManager:
         self.phase_prefetch_depth = min(
             max(1, phase_prefetch_depth), len(self.phase_specs)
         )
-        self._auto_bucket_phases = resident_phase_ratio is not None
+        # Only enable internal bucketized phases when the model already exposes
+        # multiple semantic coarse phases. For the ordinary comm-aware path
+        # (phase-aware disabled), resident ratio should keep the simpler
+        # "whole-layer ready before compute" semantics and only choose a
+        # resident tensor prefix within that layer.
+        self._auto_bucket_phases = bool(
+            resident_phase_ratio is not None and len(self._coarse_phase_specs) > 1
+        )
         self._use_record_stream_protection = self._auto_bucket_phases
         self._use_deferred_buffer_release = bool(
             self._auto_bucket_phases
@@ -141,6 +148,7 @@ class LayerwiseOffloadManager:
         }
         self._relative_name_to_phase_idx: Dict[str, int] = {}
         self._coarse_phase_name_to_phase_ids: Dict[str, Set[int]] = {}
+        self._resident_relative_names: Set[str] = set()
         self.enabled = bool(enabled and torch.cuda.is_available())
 
         self.comm_tracker: CommunicationActivityTracker | None = None
@@ -372,6 +380,46 @@ class LayerwiseOffloadManager:
                 resolved_resident_phase_names.add(name)
         self._resident_phase_ids = resolved_resident_phase_ids
         self.resident_phase_names = resolved_resident_phase_names
+
+    def _build_resident_tensor_prefix(
+        self,
+        ordered_relative_tensors: Dict[int, List[Tuple[str, int, int]]],
+    ) -> None:
+        if self.resident_phase_ratio is None:
+            return
+        if self._auto_bucket_phases:
+            return
+        if not ordered_relative_tensors:
+            return
+
+        template_layer_idx = min(ordered_relative_tensors)
+        template_tensors = ordered_relative_tensors[template_layer_idx]
+        total_bytes = sum(int(tensor_bytes) for _, tensor_bytes, _ in template_tensors)
+        if total_bytes <= 0:
+            return
+
+        target_bytes = self._quantized_target_bytes(
+            total_bytes, self.resident_phase_ratio
+        )
+        if target_bytes <= 0:
+            return
+
+        selected: Set[str] = set()
+        cumulative = 0
+        for relative_name, tensor_bytes, _phase_idx in template_tensors:
+            selected.add(relative_name)
+            cumulative += int(tensor_bytes)
+            if cumulative >= target_bytes:
+                break
+
+        self._resident_relative_names = selected
+        logger.info(
+            "Layerwise offload resident tensor prefix for %s: tensors=%d target_bytes=%.3f GiB total_bytes=%.3f GiB",
+            self.layers_attr_str,
+            len(selected),
+            target_bytes / (1024**3),
+            total_bytes / (1024**3),
+        )
 
     def _match_layer_idx(self, name: str) -> int | None:
         m = self._layer_name_re.search(name)
@@ -728,11 +776,9 @@ class LayerwiseOffloadManager:
                     prefetch_buffer_bytes += int(tensor.numel() * tensor.element_size())
 
         resident_phase_bytes = 0
-        if self._resident_phase_ids:
-            for phase_bytes_by_idx in self._resident_phase_total_bytes.values():
-                for phase_idx, phase_bytes in phase_bytes_by_idx.items():
-                    if phase_idx in self._resident_phase_ids:
-                        resident_phase_bytes += int(phase_bytes)
+        for phase_bytes_by_idx in self._resident_phase_total_bytes.values():
+            for phase_bytes in phase_bytes_by_idx.values():
+                resident_phase_bytes += int(phase_bytes)
 
         materialized_layer_count = 0
         materialized_phase_count = 0
@@ -1423,6 +1469,7 @@ class LayerwiseOffloadManager:
             ).append((name, tensor))
 
         self._build_effective_bucket_phases(ordered_relative_tensors)
+        self._build_resident_tensor_prefix(ordered_relative_tensors)
 
         layer_groups = {}
         aggregated_phase_bytes: Dict[int, int] = {
@@ -1458,15 +1505,6 @@ class LayerwiseOffloadManager:
 
                 for dtype, weights in dtype_to_params.items():
                     total_numel = sum(t.numel() for _, t in weights)
-                    phase_bytes = int(total_numel * weights[0][1].element_size())
-                    if resident_phase:
-                        self._resident_phase_total_bytes[layer_idx][phase_idx] += (
-                            phase_bytes
-                        )
-                    else:
-                        self._layer_total_bytes[layer_idx] += phase_bytes
-                        self._phase_total_bytes[layer_idx][phase_idx] += phase_bytes
-
                     cpu_buffer = torch.empty(
                         total_numel,
                         dtype=dtype,
@@ -1476,19 +1514,32 @@ class LayerwiseOffloadManager:
                     current_offset = 0
                     for name, weight in weights:
                         numel = weight.numel()
+                        relative_name = self._relative_name_after_layer(name) or ""
+                        resident_tensor = resident_phase or (
+                            relative_name in self._resident_relative_names
+                        )
                         cpu_buffer[current_offset : current_offset + numel].copy_(
                             weight.flatten()
                         )
                         self._weight_metadata[layer_idx][name] = {
                             "dtype": dtype,
                             "phase_id": phase_idx,
-                            "resident": resident_phase,
+                            "resident": resident_tensor,
                             "offset": current_offset,
                             "numel": numel,
                             "shape": weight.shape,
                         }
 
-                        if not resident_phase:
+                        tensor_bytes = int(numel * weight.element_size())
+                        if resident_tensor:
+                            self._resident_phase_total_bytes[layer_idx][phase_idx] += (
+                                tensor_bytes
+                            )
+                        else:
+                            self._layer_total_bytes[layer_idx] += tensor_bytes
+                            self._phase_total_bytes[layer_idx][phase_idx] += (
+                                tensor_bytes
+                            )
                             weight.data = self._placeholder_tensor(dtype)
                         current_offset += numel
 
