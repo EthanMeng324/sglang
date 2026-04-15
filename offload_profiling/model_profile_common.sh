@@ -35,8 +35,8 @@ resolve_profile_model() {
         wan|wanvideo)
             PROFILE_MODEL="wanvideo"
             default_model_path="${WANVIDEO_MODEL_PATH:-$(_first_existing_dir \
-                /scratch/user/u.hm347392/model/Wan2.2-T2V-A14B-Diffusers \
-                /scratch/user/u.hm347392/models/Wan2.2-T2V-A14B-Diffusers \
+                /scratch/user/u.hm347392/model/Wan2.2-TI2V-5B-Diffusers \
+                /scratch/user/u.hm347392/models/Wan2.2-TI2V-5B-Diffusers \
             || true)}"
             model_path_hint="MODEL_PATH or WANVIDEO_MODEL_PATH"
             ;;
