@@ -129,7 +129,12 @@ apply_profile_model_defaults() {
             ;;
         wanvideo)
             NUM_FRAMES="${NUM_FRAMES:-81}"
-            HEIGHT="${HEIGHT:-720}"
+            # The profiling alias currently points to Wan2.2-TI2V-5B-Diffusers,
+            # whose supported 16:9 resolution is 1280x704 rather than 1280x720.
+            # Keeping 720 here produces latent H=45, but Wan patchifies on 2x2
+            # latent patches and reconstructs H=44, which later trips the
+            # scheduler with sample/model_output shape mismatch.
+            HEIGHT="${HEIGHT:-704}"
             WIDTH="${WIDTH:-1280}"
             NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-10}"
             GUIDANCE_SCALE="${GUIDANCE_SCALE:-4.0}"
