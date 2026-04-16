@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Summarize per-step NCCL/H2D metrics for every NSYS trace in a folder."""
+"""Summarize per-step NCCL/H2D metrics for one or more explicit NSYS trace files."""
 
 from __future__ import annotations
 
 import argparse
+import os
 import sqlite3
 import subprocess
 import sys
@@ -42,21 +43,22 @@ def log(msg: str) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "input_path",
+        "input_paths",
+        nargs="+",
         type=Path,
-        help="Directory containing .nsys-rep files, or a single .nsys-rep/.sqlite file.",
+        help="One or more explicit .nsys-rep/.sqlite files to analyze.",
     )
     parser.add_argument(
         "--output",
         type=Path,
         default=None,
-        help="Markdown output path. Defaults to <input_dir>/analysis_summary.md.",
+        help="Markdown output path. Defaults to <common_parent>/analysis_summary.md.",
     )
     parser.add_argument(
         "--export-dir",
         type=Path,
         default=None,
-        help="Directory for exported sqlite files. Defaults to <input_dir>/sqlite_cache_steps.",
+        help="Directory for exported sqlite files. Defaults to <common_parent>/sqlite_cache_steps.",
     )
     parser.add_argument("--force-export", action="store_true")
     parser.add_argument(
@@ -123,25 +125,31 @@ def ensure_sqlite(input_path: Path, export_dir: Path, force_export: bool) -> Pat
     return export_sqlite(input_path, export_path)
 
 
-def collect_inputs(path: Path) -> list[Path]:
-    if path.is_file():
-        return [path]
-    if not path.is_dir():
-        raise FileNotFoundError(f"Input path not found: {path}")
+def collect_inputs(paths: list[Path]) -> list[Path]:
+    inputs: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        if not path.exists():
+            raise FileNotFoundError(f"Input path not found: {path}")
+        if path.is_dir():
+            raise IsADirectoryError(
+                f"Directory input is no longer supported; pass explicit file paths instead: {path}"
+            )
+        if not (is_valid_sqlite(path) or path.suffix == ".nsys-rep"):
+            raise RuntimeError(f"Unsupported input type: {path}")
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        inputs.append(path)
+    return inputs
 
-    reps = sorted(path.glob("*.nsys-rep"))
-    if reps:
-        return reps
 
-    sqlites = sorted(
-        p
-        for p in path.glob("*.sqlite")
-        if "sqlite_cache" not in str(p.parent) and not p.name.startswith(".")
-    )
-    if sqlites:
-        return sqlites
-
-    raise FileNotFoundError(f"No .nsys-rep or .sqlite files found in: {path}")
+def common_parent(paths: list[Path]) -> Path:
+    resolved_parents = [str(path.resolve().parent) for path in paths]
+    if not resolved_parents:
+        return Path.cwd()
+    return Path(os.path.commonpath(resolved_parents))
 
 
 def parse_step_index(text: str) -> int | None:
@@ -500,8 +508,8 @@ def build_markdown(
 
 def main() -> None:
     args = parse_args()
-    input_paths = collect_inputs(args.input_path)
-    root_dir = args.input_path if args.input_path.is_dir() else args.input_path.parent
+    input_paths = collect_inputs(args.input_paths)
+    root_dir = common_parent(input_paths)
     output_path = args.output or (root_dir / "analysis_summary.md")
     export_dir = args.export_dir or (root_dir / "sqlite_cache_steps")
     export_dir.mkdir(parents=True, exist_ok=True)
