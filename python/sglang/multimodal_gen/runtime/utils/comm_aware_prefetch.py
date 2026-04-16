@@ -65,11 +65,14 @@ class CommunicationActivityTracker:
         self._active = 0
         self._patch_state: Dict[str, Any] | None = None
         self._window_mode = _normalize_window_mode(window_mode)
-        self._event_q: queue.Queue[tuple[torch.cuda.Event | None, str, Any]] | None = None
+        self._event_q: queue.Queue[tuple[torch.cuda.Event, str]] | None = None
         self._event_stop_event: threading.Event | None = None
         self._event_thread: threading.Thread | None = None
+        self._work_q: queue.Queue[tuple[Any, str] | None] | None = None
+        self._work_thread: threading.Thread | None = None
         if self._window_mode == "kernel" and torch.cuda.is_available():
             self._event_q = queue.Queue()
+            self._work_q = queue.Queue()
             self._event_stop_event = threading.Event()
             self._event_thread = threading.Thread(
                 target=self._kernel_event_loop,
@@ -77,6 +80,12 @@ class CommunicationActivityTracker:
                 daemon=True,
             )
             self._event_thread.start()
+            self._work_thread = threading.Thread(
+                target=self._nccl_work_wait_loop,
+                name="CommActivityTrackerWorkWaiter",
+                daemon=True,
+            )
+            self._work_thread.start()
 
     def uses_kernel_window(self) -> bool:
         return self._window_mode == "kernel"
@@ -104,29 +113,82 @@ class CommunicationActivityTracker:
         *,
         nccl_work: Any = None,
     ) -> None:
-        if self._event_q is None:
-            self._block_launches_end()
+        if nccl_work is not None and self._work_q is not None:
+            self._work_q.put((nccl_work, tag))
             return
-        self._event_q.put((end_event, tag, nccl_work))
+        if end_event is not None and self._event_q is not None:
+            self._event_q.put((end_event, tag))
+            return
+        self._block_launches_end()
 
-    @staticmethod
-    def _region_completed(
-        end_event: torch.cuda.Event | None, nccl_work: Any
-    ) -> bool:
-        if nccl_work is not None:
-            try:
-                return nccl_work.is_completed()
-            except Exception:
-                return True
-        if end_event is not None:
-            return end_event.query()
-        return True
+    def _nccl_work_wait_loop(self) -> None:
+        """Poll NCCL Work objects for completion in parallel.
+
+        Unlike a FIFO blocking approach (which can only retire ~4 Works/sec
+        and causes unbounded queue growth), this loop polls ALL pending Work
+        objects each iteration so completed ones are retired immediately.
+        The pending list only holds truly in-flight Works (bounded by the
+        NCCL pipeline depth, typically 5-15).
+        """
+        assert self._work_q is not None
+        assert self._event_stop_event is not None
+        pending: list[tuple[Any, str]] = []
+        while True:
+            # Drain all new items from the queue without blocking.
+            while True:
+                try:
+                    item = self._work_q.get_nowait()
+                except queue.Empty:
+                    break
+                if item is None:
+                    for w, _ in pending:
+                        try:
+                            w.wait()
+                        except Exception:
+                            pass
+                        self._block_launches_end()
+                    pending.clear()
+                    return
+                pending.append(item)
+
+            # Poll all pending Works for completion.
+            made_progress = False
+            next_pending: list[tuple[Any, str]] = []
+            for work, tag in pending:
+                try:
+                    completed = work.is_completed()
+                except Exception:
+                    completed = True
+                if completed:
+                    del work
+                    self._block_launches_end()
+                    made_progress = True
+                else:
+                    next_pending.append((work, tag))
+            pending = next_pending
+
+            if self._event_stop_event.is_set() and not pending:
+                break
+            if made_progress:
+                continue
+
+            if not pending:
+                try:
+                    item = self._work_q.get(timeout=0.05)
+                except queue.Empty:
+                    if self._event_stop_event.is_set():
+                        break
+                    continue
+                if item is None:
+                    return
+                pending.append(item)
+            else:
+                time.sleep(0.001)
 
     def _kernel_event_loop(self) -> None:
         assert self._event_q is not None
         assert self._event_stop_event is not None
-        _completed = self._region_completed
-        pending: list[tuple[torch.cuda.Event | None, str, Any]] = []
+        pending: list[tuple[torch.cuda.Event, str]] = []
         while True:
             made_progress = False
             while True:
@@ -137,13 +199,13 @@ class CommunicationActivityTracker:
                 pending.append(item)
                 made_progress = True
 
-            next_pending: list[tuple[torch.cuda.Event | None, str, Any]] = []
-            for end_event, tag, nccl_work in pending:
-                if _completed(end_event, nccl_work):
+            next_pending: list[tuple[torch.cuda.Event, str]] = []
+            for end_event, tag in pending:
+                if end_event.query():
                     self._block_launches_end()
                     made_progress = True
                     continue
-                next_pending.append((end_event, tag, nccl_work))
+                next_pending.append((end_event, tag))
             pending = next_pending
 
             if self._event_stop_event.is_set() and not pending:
@@ -312,6 +374,11 @@ class CommunicationActivityTracker:
     def close(self) -> None:
         if self._event_stop_event is not None:
             self._event_stop_event.set()
+        if self._work_q is not None:
+            self._work_q.put(None)
+        if self._work_thread is not None:
+            self._work_thread.join(timeout=2.0)
+            self._work_thread = None
         if self._event_thread is not None:
             self._event_thread.join(timeout=1.0)
             self._event_thread = None
