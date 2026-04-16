@@ -11,6 +11,24 @@ RESULTS_DIR="${RESULTS_DIR:-$SCRIPT_DIR/results}"
 PROFILES_DIR="${PROFILES_DIR:-$RESULTS_DIR/profiles}"
 PROFILE_MODEL="${1:-${PROFILE_MODEL:-wanvideo}}"
 PROFILE_MODEL="$(printf '%s' "$PROFILE_MODEL" | tr '[:upper:]' '[:lower:]')"
+ANALYZE_RUNS_CSV="${ANALYZE_RUNS_CSV:-}"
+
+normalize_run_name() {
+    local raw="$1"
+    local run
+    run="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+    run="${run//[[:space:]]/}"
+    case "$run" in
+        no|nooffload|no-offload|no_offload) printf '%s' "no" ;;
+        old|oldoffload|old-offload|old_offload) printf '%s' "old" ;;
+        new|comm|commaware|comm-aware|comm_aware) printf '%s' "new" ;;
+        ratio|resident|ratioresident|ratio-resident|ratio_resident|phase) printf '%s' "ratio" ;;
+        *)
+            echo "ERROR: unsupported analyze run '$raw'. Supported: no,old,new,ratio"
+            exit 1
+            ;;
+    esac
+}
 
 resolve_trace_path() {
     local preferred="$1"
@@ -68,6 +86,7 @@ esac
 
 mkdir -p "$ANALYSIS_DIR"
 rm -f "$ANALYSIS_DIR"/analysis_summary.md "$ANALYSIS_DIR"/profile_matrix.csv
+rm -f "$ANALYSIS_DIR"/analysis_summary_matrix.md "$ANALYSIS_DIR"/analysis_summary_step_metrics.md
 
 if ! command -v nsys >/dev/null 2>&1; then
     echo "ERROR: nsys not found in PATH."
@@ -79,20 +98,44 @@ if ! command -v python3 >/dev/null 2>&1; then
     exit 1
 fi
 
-if [[ ! -f "$NEW_NSYS" ]]; then
-    echo "ERROR: missing new profile: $NEW_NSYS"
+SELECTED_RUNS=()
+if [[ -n "$ANALYZE_RUNS_CSV" ]]; then
+    IFS=',' read -r -a _analyze_items <<<"$ANALYZE_RUNS_CSV"
+    declare -A _seen_runs=()
+    for _item in "${_analyze_items[@]}"; do
+        _run="$(normalize_run_name "$_item")"
+        if [[ -n "${_seen_runs[$_run]:-}" ]]; then
+            continue
+        fi
+        _seen_runs["$_run"]=1
+        SELECTED_RUNS+=("$_run")
+    done
+else
+    [[ -f "$NO_NSYS" ]] && SELECTED_RUNS+=("no")
+    [[ -f "$OLD_NSYS" ]] && SELECTED_RUNS+=("old")
+    [[ -f "$NEW_NSYS" ]] && SELECTED_RUNS+=("new")
+    [[ -f "$RATIO_NSYS" ]] && SELECTED_RUNS+=("ratio")
+fi
+
+if [[ "${#SELECTED_RUNS[@]}" -eq 0 ]]; then
+    echo "ERROR: no NSYS profiles selected for analysis."
     exit 1
 fi
 
-if [[ ! -f "$OLD_NSYS" ]]; then
-    echo "ERROR: missing old profile: $OLD_NSYS"
-    exit 1
-fi
-
-if [[ ! -f "$NO_NSYS" ]]; then
-    echo "ERROR: missing no-offload profile: $NO_NSYS"
-    exit 1
-fi
+SELECTED_TRACE_PATHS=()
+for _run in "${SELECTED_RUNS[@]}"; do
+    case "$_run" in
+        no) _path="$NO_NSYS" ;;
+        old) _path="$OLD_NSYS" ;;
+        new) _path="$NEW_NSYS" ;;
+        ratio) _path="$RATIO_NSYS" ;;
+    esac
+    if [[ ! -f "$_path" ]]; then
+        echo "ERROR: missing ${_run} profile: $_path"
+        exit 1
+    fi
+    SELECTED_TRACE_PATHS+=("$_path")
+done
 
 echo "=========================================="
 echo "NSYS PROFILE MATRIX"
@@ -102,6 +145,7 @@ echo "new  : $NEW_NSYS"
 echo "old  : $OLD_NSYS"
 echo "no   : $NO_NSYS"
 echo "ratio: $RATIO_NSYS"
+echo "runs : $(IFS=,; echo "${SELECTED_RUNS[*]}")"
 echo "out  : $ANALYSIS_DIR"
 echo ""
 echo "Optional overrides:"
@@ -113,16 +157,28 @@ echo "  Legacy aliases: *_PEAK_MEMORY_MB -> *_PEAK_RESERVED_MB"
 echo ""
 
 python3 "$SCRIPT_DIR/summarize_profile_matrix.py" \
+    --runs "$(IFS=,; echo "${SELECTED_RUNS[*]}")" \
     --no "$NO_NSYS" \
     --old "$OLD_NSYS" \
     --new "$NEW_NSYS" \
     --ratio "$RATIO_NSYS" \
-    --output "$ANALYSIS_DIR/analysis_summary.md" \
+    --output "$ANALYSIS_DIR/analysis_summary_matrix.md" \
     --csv-output "$ANALYSIS_DIR/profile_matrix.csv"
+
+python3 "$SCRIPT_DIR/analyze_nsys_step_metrics.py" \
+    "${SELECTED_TRACE_PATHS[@]}" \
+    --output "$ANALYSIS_DIR/analysis_summary_step_metrics.md" \
+    --export-dir "$ANALYSIS_DIR/sqlite_cache_steps"
+
+cat "$ANALYSIS_DIR/analysis_summary_matrix.md" >"$ANALYSIS_DIR/analysis_summary.md"
+printf '\n## Step Metrics\n\n' >>"$ANALYSIS_DIR/analysis_summary.md"
+sed '1{/^# Analysis Summary$/d;}' "$ANALYSIS_DIR/analysis_summary_step_metrics.md" >>"$ANALYSIS_DIR/analysis_summary.md"
 
 echo ""
 echo "Analysis completed."
 echo "Summary:"
 echo "  - $ANALYSIS_DIR/analysis_summary.md"
+echo "  - $ANALYSIS_DIR/analysis_summary_matrix.md"
+echo "  - $ANALYSIS_DIR/analysis_summary_step_metrics.md"
 echo "CSV outputs:"
 ls -1 "$ANALYSIS_DIR"/profile_matrix.csv 2>/dev/null || true

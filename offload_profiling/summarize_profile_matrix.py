@@ -48,6 +48,12 @@ def parse_args() -> argparse.Namespace:
         help=argparse.SUPPRESS,
     )
     parser.add_argument(
+        "--runs",
+        type=str,
+        default=",".join(MAIN_RUNS),
+        help="Comma-separated subset of runs to summarize: no,old,new,ratio",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("offload_profiling/results/profiles/analysis/analysis_summary.md"),
@@ -64,6 +70,28 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--force-export", action="store_true")
     return parser.parse_args()
+
+
+def normalize_runs(raw: str) -> list[str]:
+    runs: list[str] = []
+    seen: set[str] = set()
+    for item in raw.split(","):
+        run = item.strip().lower()
+        if not run:
+            continue
+        if run == "phase":
+            run = "ratio"
+        if run not in MAIN_RUNS:
+            raise ValueError(
+                f"Unsupported run '{item}'. Supported runs: {', '.join(MAIN_RUNS)}"
+            )
+        if run in seen:
+            continue
+        seen.add(run)
+        runs.append(run)
+    if not runs:
+        raise ValueError("No runs selected")
+    return runs
 
 
 def env_float(name: str) -> float | None:
@@ -308,13 +336,13 @@ def delta(base: float | None, other: float | None) -> float | None:
     return other - base
 
 
-def build_rows(args: argparse.Namespace) -> list[dict[str, object]]:
+def build_rows(args: argparse.Namespace, selected_runs: list[str]) -> list[dict[str, object]]:
     rows = []
     export_dir = args.export_dir
     export_dir.mkdir(parents=True, exist_ok=True)
     if args.phase is not None and not args.ratio.exists() and args.phase.exists():
         args.ratio = args.phase
-    for key in MAIN_RUNS:
+    for key in selected_runs:
         path: Path = getattr(args, key)
         env_prefixes = [key.upper()]
         if key == "ratio":
@@ -494,24 +522,40 @@ def write_csv(rows: list[dict[str, object]], path: Path) -> None:
         writer.writerows(rows)
 
 
-def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
+def pick_base_row(
+    by_run: dict[str, dict[str, object]], selected_runs: list[str]
+) -> dict[str, object]:
+    if "no" in by_run:
+        return by_run["no"]
+    for key in selected_runs:
+        row = by_run.get(key)
+        if row is not None:
+            return row
+    raise RuntimeError("No selected runs available for summary baseline")
+
+
+def write_markdown(
+    rows: list[dict[str, object]], path: Path, selected_runs: list[str]
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     by_run = {row["run"]: row for row in rows}
     warmup_row = by_run.get("warmup")
-    base_step = by_run["no"]["step_time_s"]
-    base_total_duration = by_run["no"]["total_duration_ms"]
-    base_peak_reserved = by_run["no"]["peak_reserved_mb"]
-    base_peak_allocated = by_run["no"]["peak_allocated_mb"]
+    base_row = pick_base_row(by_run, selected_runs)
+    base_label = str(base_row["label"])
+    base_step = base_row["step_time_s"]
+    base_total_duration = base_row["total_duration_ms"]
+    base_peak_reserved = base_row["peak_reserved_mb"]
+    base_peak_allocated = base_row["peak_allocated_mb"]
 
     lines = [
         "# Offload Profile Summary",
         "",
         "## Step Time",
         "",
-        "| Profile | Step Time (s) | Delta vs No (s) | Ratio vs No | Source |",
+        f"| Profile | Step Time (s) | Delta vs {base_label} (s) | Ratio vs {base_label} | Source |",
         "|---|---:|---:|---:|---|",
     ]
-    for key in MAIN_RUNS:
+    for key in selected_runs:
         row = by_run[key]
         lines.append(
             "| {label} | {step} | {delta} | {ratio} | {source} |".format(
@@ -532,7 +576,7 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
         "| Profile | Switch Step | Step Time (s) | Raw Mean incl. Switch (s) | Used Steps |",
         "|---|---:|---:|---:|---:|",
     ]
-    for key in MAIN_RUNS:
+    for key in selected_runs:
         row = by_run[key]
         lines.append(
             "| {label} | {step_idx} | {switch_time} | {raw_mean} | {count} |".format(
@@ -548,10 +592,10 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
         "",
         "## Total Duration",
         "",
-        "| Profile | Total Duration (ms) | Delta vs No (ms) | Ratio vs No | Source |",
+        f"| Profile | Total Duration (ms) | Delta vs {base_label} (ms) | Ratio vs {base_label} | Source |",
         "|---|---:|---:|---:|---|",
     ]
-    for key in MAIN_RUNS:
+    for key in selected_runs:
         row = by_run[key]
         lines.append(
             "| {label} | {duration} | {delta} | {ratio} | {source} |".format(
@@ -567,10 +611,10 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
         "",
         "## Peak Reserved Memory",
         "",
-        "| Profile | Peak Reserved (MB) | Delta vs No (MB) | Ratio vs No | Source |",
+        f"| Profile | Peak Reserved (MB) | Delta vs {base_label} (MB) | Ratio vs {base_label} | Source |",
         "|---|---:|---:|---:|---|",
     ]
-    for key in MAIN_RUNS:
+    for key in selected_runs:
         row = by_run[key]
         lines.append(
             "| {label} | {mem} | {delta} | {ratio} | {source} |".format(
@@ -586,10 +630,10 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
         "",
         "## Peak Allocated Memory",
         "",
-        "| Profile | Peak Allocated (MB) | Delta vs No (MB) | Ratio vs No | Source |",
+        f"| Profile | Peak Allocated (MB) | Delta vs {base_label} (MB) | Ratio vs {base_label} | Source |",
         "|---|---:|---:|---:|---|",
     ]
-    for key in MAIN_RUNS:
+    for key in selected_runs:
         row = by_run[key]
         lines.append(
             "| {label} | {mem} | {delta} | {ratio} | {source} |".format(
@@ -606,7 +650,7 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
             "",
             "## Warmup Full-Resident Memory",
             "",
-            "| Profile | Peak Reserved (MB) | Delta vs No (MB) | Peak Allocated (MB) | Delta vs No (MB) | Source |",
+            f"| Profile | Peak Reserved (MB) | Delta vs {base_label} (MB) | Peak Allocated (MB) | Delta vs {base_label} (MB) | Source |",
             "|---|---:|---:|---:|---:|---|",
             "| {label} | {peak_reserved} | {reserved_delta} | {peak_allocated} | {allocated_delta} | {source} |".format(
                 label=warmup_row["label"],
@@ -627,9 +671,10 @@ def write_markdown(rows: list[dict[str, object]], path: Path) -> None:
 
 def main() -> None:
     args = parse_args()
-    rows = build_rows(args)
+    selected_runs = normalize_runs(args.runs)
+    rows = build_rows(args, selected_runs)
     write_csv(rows, args.csv_output)
-    write_markdown(rows, args.output)
+    write_markdown(rows, args.output, selected_runs)
 
 
 if __name__ == "__main__":
