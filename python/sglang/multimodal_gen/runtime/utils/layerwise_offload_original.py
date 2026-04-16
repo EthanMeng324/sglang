@@ -455,10 +455,14 @@ class LayerwiseOffloadManager:
         self._gpu_layers.add(layer_idx)
 
     @torch.compiler.disable
-    def quiesce_copy_stream_for_comm(self) -> None:
+    def quiesce_copy_stream_for_comm(self, after_drain=None) -> None:
         if not self.enabled or self.copy_stream is None:
+            if after_drain is not None:
+                after_drain()
             return
         torch.cuda.current_stream().wait_stream(self.copy_stream)
+        if after_drain is not None:
+            after_drain()
 
     @torch.compiler.disable
     def release_layer(self, layer_idx: int) -> None:
@@ -755,12 +759,16 @@ class OffloadableDiTMixin:
     ) -> None:
         return
 
-    def quiesce_prefetch_for_comm(self) -> None:
+    def quiesce_prefetch_for_comm(self, after_drain=None) -> None:
         if self.layerwise_offload_managers is None:
+            if after_drain is not None:
+                after_drain()
             return
         for manager in self.layerwise_offload_managers:
             if manager.enabled:
                 manager.quiesce_copy_stream_for_comm()
+        if after_drain is not None:
+            after_drain()
 
     def disable_offload(self) -> None:
         """Disable layerwise offload: load all layers to GPU and remove hooks."""

@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import torch
+import torch.distributed as dist
 import torch.distributed._functional_collectives as ft_c
 from torch.distributed.tensor.experimental._attention import _cp_options
 
@@ -89,9 +90,38 @@ def _finish_comm_region(tracker, tag: str, region) -> None:
 
 
 @torch.compiler.disable
-def _quiesce_prefetch_for_comm(quiesce_fn) -> None:
-    if quiesce_fn is not None:
+def _quiesce_prefetch_for_comm(quiesce_fn, after_drain=None) -> None:
+    if quiesce_fn is None:
+        if after_drain is not None:
+            after_drain()
+        return
+    if after_drain is None:
         quiesce_fn()
+        return
+    try:
+        quiesce_fn(after_drain=after_drain)
+    except TypeError:
+        quiesce_fn()
+        after_drain()
+
+
+@torch.compiler.disable
+def _tracker_uses_kernel_window(tracker) -> bool:
+    if tracker is None:
+        return False
+    fn = getattr(tracker, "uses_kernel_window", None)
+    return bool(callable(fn) and fn())
+
+
+@torch.compiler.disable
+def _block_work_on_current_stream(work) -> None:
+    if work is None:
+        return
+    block_current_stream = getattr(work, "block_current_stream", None)
+    if callable(block_current_stream):
+        block_current_stream()
+    else:
+        work.wait()
 
 
 def _maybe_wait(tensor: torch.Tensor) -> torch.Tensor:
@@ -111,6 +141,7 @@ def _usp_all_to_all_single(x: torch.Tensor, tag: str) -> torch.Tensor:
     x = x.flatten()
     tracker = _get_comm_activity_tracker()
     quiesce_fn = _get_comm_quiesce_fn()
+    precise_window = _tracker_uses_kernel_window(tracker)
     push_nvtx = bool(torch.cuda.is_available() and hasattr(torch.cuda, "nvtx"))
     nvtx_pushed = False
     detail_nvtx_pushed = False
@@ -118,8 +149,10 @@ def _usp_all_to_all_single(x: torch.Tensor, tag: str) -> torch.Tensor:
     try:
         # Mirror mock-comm correctness: freeze new launches and drain in-flight
         # prefetch H2D before starting the real USP collective.
-        _quiesce_prefetch_for_comm(quiesce_fn)
-        _record_comm_region_start(comm_region)
+        _quiesce_prefetch_for_comm(
+            quiesce_fn,
+            after_drain=lambda: _record_comm_region_start(comm_region),
+        )
         if push_nvtx:
             nvtx_label = f"SGL_REAL_COMM_USP_DEV{torch.cuda.current_device()}"
             torch.cuda.nvtx.range_push(nvtx_label)
@@ -130,10 +163,16 @@ def _usp_all_to_all_single(x: torch.Tensor, tag: str) -> torch.Tensor:
                 )
                 detail_nvtx_pushed = True
             nvtx_pushed = True
-        x = ft_c.all_to_all_single(
-            x, output_split_sizes=None, input_split_sizes=None, group=ulysses_pg
-        )
-        x = _maybe_wait(x)
+        if precise_window:
+            output = torch.empty_like(x)
+            work = dist.all_to_all_single(output, x, group=ulysses_pg, async_op=True)
+            _block_work_on_current_stream(work)
+            x = output
+        else:
+            x = ft_c.all_to_all_single(
+                x, output_split_sizes=None, input_split_sizes=None, group=ulysses_pg
+            )
+            x = _maybe_wait(x)
         x = x.reshape(x_shape)
         return x
     finally:

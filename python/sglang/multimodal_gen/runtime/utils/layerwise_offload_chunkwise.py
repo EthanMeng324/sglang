@@ -1131,12 +1131,16 @@ class LayerwiseOffloadManager:
                     gpu_buffer.record_stream(current_stream)
 
     @torch.compiler.disable
-    def quiesce_copy_stream_for_comm(self) -> None:
+    def quiesce_copy_stream_for_comm(self, after_drain=None) -> None:
         """Ensure no in-flight/offloaded H2D remains before communication starts."""
         if not self.enabled or self.copy_stream is None:
+            if after_drain is not None:
+                after_drain()
             return
         with self._copy_lock:
             torch.cuda.current_stream().wait_stream(self.copy_stream)
+            if after_drain is not None:
+                after_drain()
 
     @torch.compiler.disable
     def _copy_one_chunk(
@@ -2165,12 +2169,25 @@ class OffloadableDiTMixin:
             return
         manager.ensure_named_phase_ready(layer_idx, phase_name)
 
-    def quiesce_prefetch_for_comm(self) -> None:
+    def quiesce_prefetch_for_comm(self, after_drain=None) -> None:
         if self.layerwise_offload_managers is None:
+            if after_drain is not None:
+                after_drain()
             return
-        for manager in self.layerwise_offload_managers:
-            if manager.enabled:
-                manager.quiesce_copy_stream_for_comm()
+        guards = []
+        try:
+            for manager in self.layerwise_offload_managers:
+                if not manager.enabled or manager.copy_stream is None:
+                    continue
+                manager._copy_lock.acquire()
+                guards.append(manager)
+            for manager in guards:
+                torch.cuda.current_stream().wait_stream(manager.copy_stream)
+            if after_drain is not None:
+                after_drain()
+        finally:
+            for manager in reversed(guards):
+                manager._copy_lock.release()
 
     def disable_offload(self) -> None:
         """Disable layerwise offload: load all layers to GPU and remove hooks."""

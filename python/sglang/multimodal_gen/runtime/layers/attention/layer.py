@@ -5,6 +5,7 @@ from typing import Type
 
 import torch
 import torch.nn as nn
+import torch.distributed as dist
 
 from sglang.multimodal_gen.runtime.distributed.communication_op import (
     sequence_model_parallel_all_gather,
@@ -26,6 +27,8 @@ from sglang.multimodal_gen.runtime.layers.usp import (
     _get_comm_activity_tracker,
     _get_comm_quiesce_fn,
     _finish_comm_region,
+    _block_work_on_current_stream,
+    _tracker_uses_kernel_window,
     _quiesce_prefetch_for_comm,
     _record_comm_region_start,
     _usp_input_all_to_all,
@@ -41,6 +44,82 @@ from sglang.multimodal_gen.utils import get_compute_dtype
 
 
 @torch.compiler.disable
+def _sequence_all_to_all_4d_blocking_current_stream(
+    x: torch.Tensor, scatter_dim: int, gather_dim: int
+) -> torch.Tensor:
+    group = get_sp_group()
+    world_size = group.world_size
+    if world_size == 1:
+        return x
+
+    assert x.dim() == 4, f"input must be 4D tensor, got {x.dim()} and shape {x.shape}"
+    device_group = group.device_group
+    assert device_group is not None, "Sequence parallel device group is not initialized."
+
+    if scatter_dim == 2 and gather_dim == 1:
+        _, _, hn, _ = x.shape
+        shard_hn = hn // world_size
+        x = x.transpose(0, 2).contiguous()
+        output = torch.empty_like(x)
+        work = dist.all_to_all_single(output, x, group=device_group, async_op=True)
+        _block_work_on_current_stream(work)
+        output = torch.cat(output.split(shard_hn), dim=1)
+        return output.transpose(0, 2).contiguous()
+
+    if scatter_dim == 1 and gather_dim == 2:
+        _, seqlen, shard_hn, _ = x.shape
+        shard_seqlen = seqlen // world_size
+        x = x.transpose(0, 2).contiguous()
+        x = (
+            x.reshape(shard_hn, world_size, shard_seqlen, x.shape[2], x.shape[3])
+            .transpose(0, 1)
+            .reshape(shard_hn * world_size, shard_seqlen, x.shape[2], x.shape[3])
+            .contiguous()
+        )
+        output = torch.empty_like(x)
+        work = dist.all_to_all_single(output, x, group=device_group, async_op=True)
+        _block_work_on_current_stream(work)
+        return output.transpose(0, 2).contiguous()
+
+    raise RuntimeError(
+        f"Invalid scatter_dim={scatter_dim}, gather_dim={gather_dim}. "
+        "Only (scatter_dim=2, gather_dim=1) and (scatter_dim=1, gather_dim=2) are supported."
+    )
+
+
+@torch.compiler.disable
+def _sequence_all_gather_blocking_current_stream(
+    x: torch.Tensor, dim: int
+) -> torch.Tensor:
+    group = get_sp_group()
+    world_size = group.world_size
+    if world_size == 1:
+        return x
+
+    assert -x.dim() <= dim < x.dim(), f"Invalid dim ({dim}) for input tensor with shape {x.size()}"
+    if dim < 0:
+        dim += x.dim()
+
+    device_group = group.device_group
+    assert device_group is not None, "Sequence parallel device group is not initialized."
+
+    input_size = list(x.size())
+    flat_output_size = list(input_size)
+    flat_output_size[0] *= world_size
+    output = torch.empty(flat_output_size, dtype=x.dtype, device=x.device)
+    work = dist.all_gather_into_tensor(output, x, group=device_group, async_op=True)
+    _block_work_on_current_stream(work)
+
+    if dim != 0:
+        flat_output_size[0] //= world_size
+        output = output.reshape([world_size] + flat_output_size)
+        output = output.movedim(0, dim)
+
+    input_size[dim] *= world_size
+    return output.reshape(input_size)
+
+
+@torch.compiler.disable
 def _comm_aware_sequence_all_to_all_4d(
     x: torch.Tensor, scatter_dim: int, gather_dim: int, tag: str
 ) -> torch.Tensor:
@@ -48,8 +127,14 @@ def _comm_aware_sequence_all_to_all_4d(
     quiesce_fn = _get_comm_quiesce_fn()
     comm_region = _begin_comm_region(tracker, tag)
     try:
-        _quiesce_prefetch_for_comm(quiesce_fn)
-        _record_comm_region_start(comm_region)
+        _quiesce_prefetch_for_comm(
+            quiesce_fn,
+            after_drain=lambda: _record_comm_region_start(comm_region),
+        )
+        if _tracker_uses_kernel_window(tracker):
+            return _sequence_all_to_all_4d_blocking_current_stream(
+                x, scatter_dim=scatter_dim, gather_dim=gather_dim
+            )
         return sequence_model_parallel_all_to_all_4D(
             x, scatter_dim=scatter_dim, gather_dim=gather_dim
         )
@@ -65,8 +150,12 @@ def _comm_aware_sequence_all_gather(
     quiesce_fn = _get_comm_quiesce_fn()
     comm_region = _begin_comm_region(tracker, tag)
     try:
-        _quiesce_prefetch_for_comm(quiesce_fn)
-        _record_comm_region_start(comm_region)
+        _quiesce_prefetch_for_comm(
+            quiesce_fn,
+            after_drain=lambda: _record_comm_region_start(comm_region),
+        )
+        if _tracker_uses_kernel_window(tracker):
+            return _sequence_all_gather_blocking_current_stream(x, dim=dim)
         return sequence_model_parallel_all_gather(x, dim=dim)
     finally:
         _finish_comm_region(tracker, tag, comm_region)

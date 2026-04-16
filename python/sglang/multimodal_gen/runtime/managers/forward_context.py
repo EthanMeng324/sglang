@@ -42,7 +42,7 @@ class ForwardContext:
     forward_batch: Optional["Req"] = None
     attention_backend_cls: Optional[Type] = None
     comm_activity_tracker: Optional["CommunicationActivityTracker"] = None
-    comm_quiesce_fn: Optional[Callable[[], None]] = None
+    comm_quiesce_fn: Optional[Callable[..., None]] = None
 
     def set_attn_backend_cls(self, attention_backend_cls: Type):
         if self.attention_backend_cls:
