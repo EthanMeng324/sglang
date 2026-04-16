@@ -321,17 +321,7 @@ else
     fi
 fi
 if [[ "$RUN_ANALYZE" == "1" ]]; then
-    ANALYZE_RUN_SELECTION=()
-    [[ "$RUN_NO" == "1" ]] && ANALYZE_RUN_SELECTION+=("no")
-    [[ "$RUN_OLD" == "1" ]] && ANALYZE_RUN_SELECTION+=("old")
-    [[ "$RUN_NEW" == "1" ]] && ANALYZE_RUN_SELECTION+=("new")
-    [[ "$RUN_RATIO" == "1" ]] && ANALYZE_RUN_SELECTION+=("ratio")
-    if [[ "${#ANALYZE_RUN_SELECTION[@]}" -gt 0 ]]; then
-        run_step_with_env "Analyze NSYS" "analyze_nsys.sh" \
-            ANALYZE_RUNS_CSV="$(IFS=,; echo "${ANALYZE_RUN_SELECTION[*]}")"
-    else
-        run_step "Analyze NSYS" "analyze_nsys.sh"
-    fi
+    run_step "Analyze NSYS" "analyze_nsys.sh"
 fi
 
 echo "=========================================="
