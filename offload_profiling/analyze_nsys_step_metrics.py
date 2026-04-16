@@ -463,7 +463,7 @@ def fmt_float(value: float) -> str:
 
 
 def build_markdown(
-    input_path: Path,
+    input_path: str,
     metrics: list[TraceMetrics],
     errors: list[tuple[str, str]],
 ) -> str:
@@ -539,7 +539,12 @@ def main() -> None:
 
     metrics.sort(key=lambda item: item.trace_name)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(build_markdown(args.input_path, metrics, errors))
+    input_desc = (
+        str(input_paths[0])
+        if len(input_paths) == 1
+        else ", ".join(str(path) for path in input_paths)
+    )
+    output_path.write_text(build_markdown(input_desc, metrics, errors))
     log(f"Wrote summary: {output_path}")
 
 
