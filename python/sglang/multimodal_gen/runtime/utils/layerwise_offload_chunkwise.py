@@ -95,6 +95,7 @@ class LayerwiseOffloadManager:
         prefetch_size: int = 1,
         comm_aware: bool = False,
         comm_patch_torch_distributed: bool = False,
+        comm_active_window_mode: str = "kernel",
         prefetch_chunk_size_mb: int = 32,
         phase_specs: Sequence[PhaseSpec] | None = None,
         phase_prefetch_depth: int = 4,
@@ -110,6 +111,7 @@ class LayerwiseOffloadManager:
         self.prefetch_size = min(max(1, prefetch_size), self.num_layers)
         self.comm_aware = comm_aware
         self.comm_patch_torch_distributed = comm_patch_torch_distributed
+        self.comm_active_window_mode = comm_active_window_mode
         self.prefetch_chunk_size_bytes = max(1, prefetch_chunk_size_mb) * 1024 * 1024
         self.submodule_granularity = submodule_granularity
         self._coarse_phase_specs: Tuple[PhaseSpec, ...] = tuple(
@@ -157,7 +159,11 @@ class LayerwiseOffloadManager:
 
         self.device = torch.device("cuda", torch.cuda.current_device())
         self.copy_stream = torch.cuda.Stream()
-        self.comm_tracker = CommunicationActivityTracker() if self.comm_aware else None
+        self.comm_tracker = (
+            CommunicationActivityTracker(window_mode=self.comm_active_window_mode)
+            if self.comm_aware
+            else None
+        )
 
         self._layer_name_re = re.compile(
             rf"(^|\.){re.escape(layers_attr_str)}\.(\d+)(\.|$)"
@@ -1140,6 +1146,8 @@ class LayerwiseOffloadManager:
             return False
 
         with self._copy_lock:
+            if self.comm_tracker is not None and self.comm_tracker.is_active():
+                return False
             with self._state_lock:
                 self._reap_deferred_gpu_releases_locked()
                 if self._phase_completed_locked(layer_idx, phase_idx):
@@ -1225,6 +1233,9 @@ class LayerwiseOffloadManager:
                 src = cpu_by_dtype[chosen_dtype][chosen_start:chosen_end]
                 dst = gpu_by_dtype[chosen_dtype][chosen_start:chosen_end]
                 nbytes = (chosen_end - chosen_start) * src.element_size()
+
+            if self.comm_tracker is not None and self.comm_tracker.is_active():
+                return False
 
             push_nvtx = bool(torch.cuda.is_available() and hasattr(torch.cuda, "nvtx"))
             push_detail_nvtx = False
@@ -1969,6 +1980,7 @@ class LayerwiseOffloadManager:
         self._forward_hooks.clear()
         if self.comm_tracker is not None:
             self.comm_tracker.unpatch_torch_distributed()
+            self.comm_tracker.close()
 
 
 class OffloadableDiTMixin:
@@ -2003,6 +2015,10 @@ class OffloadableDiTMixin:
         comm_patch_dist = bool(
             getattr(server_args, "dit_comm_aware_patch_torch_dist", False)
             or _env_bool("SGLANG_DIT_COMM_AWARE_PATCH_TORCH_DIST", False)
+        )
+        comm_active_window_mode = _env_str(
+            "SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE",
+            getattr(server_args, "dit_comm_active_window_mode", "kernel"),
         )
         prefetch_chunk_size_mb = int(
             getattr(server_args, "dit_comm_prefetch_chunk_size_mb", 32)
@@ -2081,6 +2097,7 @@ class OffloadableDiTMixin:
                 prefetch_size=prefetch_size,
                 comm_aware=comm_aware,
                 comm_patch_torch_distributed=comm_patch_dist,
+                comm_active_window_mode=comm_active_window_mode,
                 prefetch_chunk_size_mb=prefetch_chunk_size_mb,
                 phase_specs=phase_specs,
                 phase_prefetch_depth=phase_prefetch_depth,
@@ -2097,7 +2114,8 @@ class OffloadableDiTMixin:
         if comm_aware:
             logger.info(
                 "Communication-aware chunk-wise offload is enabled "
-                f"(chunk={prefetch_chunk_size_mb}MB, patch_torch_dist={comm_patch_dist})."
+                f"(chunk={prefetch_chunk_size_mb}MB, patch_torch_dist={comm_patch_dist}, "
+                f"comm_window={comm_active_window_mode})."
             )
         if phase_aware:
             logger.info(

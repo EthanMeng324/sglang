@@ -8,7 +8,7 @@ usage() {
     cat <<'EOF'
 Usage:
   bash offload_profiling/run_profile.sh <model> [num_frames]
-  bash offload_profiling/run_profile.sh --model <model> [--num-frames <n>] [--batch-size <n>] [--resident-ratio <r>] [--vae-precision <p>] [--steps <csv>]
+  bash offload_profiling/run_profile.sh --model <model> [--num-frames <n>] [--batch-size <n>] [--resident-ratio <r>] [--vae-precision <p>] [--comm-window-mode <kernel|launch>] [--steps <csv>]
 
 Supported models:
   wanvideo
@@ -35,6 +35,7 @@ NUM_FRAMES_OVERRIDE="${NUM_FRAMES:-}"
 BATCH_SIZE_OVERRIDE="${BATCH_SIZE:-${NUM_OUTPUTS_PER_PROMPT:-}}"
 RESIDENT_RATIO_OVERRIDE="${SGLANG_DIT_OFFLOAD_RESIDENT_RATIO:-}"
 VAE_PRECISION_OVERRIDE="${PROFILE_VAE_PRECISION:-${VAE_PRECISION_OVERRIDE:-}}"
+COMM_WINDOW_MODE_OVERRIDE="${SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE:-}"
 PROFILE_STEPS_OVERRIDE="${PROFILE_STEPS:-all}"
 
 while [[ $# -gt 0 ]]; do
@@ -57,6 +58,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --vae-precision)
             VAE_PRECISION_OVERRIDE="$2"
+            shift 2
+            ;;
+        --comm-window-mode)
+            COMM_WINDOW_MODE_OVERRIDE="$2"
             shift 2
             ;;
         --steps)
@@ -200,6 +205,7 @@ if profile_model_is_image; then
     echo "VAE CPU offload : ${VAE_CPU_OFFLOAD_EFFECTIVE}"
 fi
 echo "VAE precision : ${VAE_PRECISION_EFFECTIVE:-default}"
+echo "Comm window mode : ${COMM_WINDOW_MODE_OVERRIDE:-kernel}"
 echo "Start      : $(date)"
 echo ""
 
@@ -279,6 +285,7 @@ if profile_model_is_image; then
             DIT_CPU_OFFLOAD_OVERRIDE="$DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE" \
             VAE_CPU_OFFLOAD_OVERRIDE="$VAE_CPU_OFFLOAD_EFFECTIVE" \
             VAE_PRECISION_OVERRIDE="$VAE_PRECISION_EFFECTIVE" \
+            SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE="${COMM_WINDOW_MODE_OVERRIDE:-kernel}" \
             SGLANG_DIT_OFFLOAD_RESIDENT_RATIO= \
             SGLANG_DIT_PHASE_AWARE_PREFETCH=0
     fi
@@ -287,18 +294,21 @@ if profile_model_is_image; then
             DIT_CPU_OFFLOAD_OVERRIDE="$DIT_CPU_OFFLOAD_EFFECTIVE_FOR_IMAGE" \
             VAE_CPU_OFFLOAD_OVERRIDE="$VAE_CPU_OFFLOAD_EFFECTIVE" \
             VAE_PRECISION_OVERRIDE="$VAE_PRECISION_EFFECTIVE" \
+            SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE="${COMM_WINDOW_MODE_OVERRIDE:-kernel}" \
             SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="$RESIDENT_RATIO_EFFECTIVE"
     fi
 else
     if [[ "$RUN_NEW" == "1" ]]; then
         run_step_with_env "Comm-Aware Offload" "run_access.sh" \
             VAE_PRECISION_OVERRIDE="$VAE_PRECISION_EFFECTIVE" \
+            SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE="${COMM_WINDOW_MODE_OVERRIDE:-kernel}" \
             SGLANG_DIT_OFFLOAD_RESIDENT_RATIO= \
             SGLANG_DIT_PHASE_AWARE_PREFETCH=0
     fi
     if [[ "$RUN_RATIO" == "1" ]]; then
         run_step_with_env "Ratio-Resident Offload" "run_access_phase.sh" \
             VAE_PRECISION_OVERRIDE="$VAE_PRECISION_EFFECTIVE" \
+            SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE="${COMM_WINDOW_MODE_OVERRIDE:-kernel}" \
             SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="$RESIDENT_RATIO_EFFECTIVE"
     fi
     if [[ "$RUN_NO" == "1" ]]; then

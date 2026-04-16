@@ -63,6 +63,32 @@ def _mark_comm_end(tracker, tag: str) -> None:
 
 
 @torch.compiler.disable
+def _begin_comm_region(tracker, tag: str):
+    if tracker is None:
+        return None
+    region = tracker.begin_kernel_region(tag)
+    if region is None:
+        tracker.mark_start(tag)
+    return region
+
+
+@torch.compiler.disable
+def _record_comm_region_start(region) -> None:
+    if region is not None:
+        region.record_start()
+
+
+@torch.compiler.disable
+def _finish_comm_region(tracker, tag: str, region) -> None:
+    if tracker is None:
+        return
+    if region is not None:
+        region.finalize()
+    else:
+        tracker.mark_end(tag)
+
+
+@torch.compiler.disable
 def _quiesce_prefetch_for_comm(quiesce_fn) -> None:
     if quiesce_fn is not None:
         quiesce_fn()
@@ -88,11 +114,12 @@ def _usp_all_to_all_single(x: torch.Tensor, tag: str) -> torch.Tensor:
     push_nvtx = bool(torch.cuda.is_available() and hasattr(torch.cuda, "nvtx"))
     nvtx_pushed = False
     detail_nvtx_pushed = False
-    _mark_comm_start(tracker, tag)
+    comm_region = _begin_comm_region(tracker, tag)
     try:
         # Mirror mock-comm correctness: freeze new launches and drain in-flight
         # prefetch H2D before starting the real USP collective.
         _quiesce_prefetch_for_comm(quiesce_fn)
+        _record_comm_region_start(comm_region)
         if push_nvtx:
             nvtx_label = f"SGL_REAL_COMM_USP_DEV{torch.cuda.current_device()}"
             torch.cuda.nvtx.range_push(nvtx_label)
@@ -117,7 +144,7 @@ def _usp_all_to_all_single(x: torch.Tensor, tag: str) -> torch.Tensor:
                 torch.cuda.nvtx.range_pop()
             except Exception:
                 pass
-        _mark_comm_end(tracker, tag)
+        _finish_comm_region(tracker, tag, comm_region)
 
 
 def _usp_input_all_to_all(x: torch.Tensor, head_dim: int = 1) -> torch.Tensor:

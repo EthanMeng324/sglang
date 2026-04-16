@@ -22,11 +22,12 @@ from sglang.multimodal_gen.runtime.layers.attention.backends.attention_backend i
 )
 from sglang.multimodal_gen.runtime.layers.attention.selector import get_attn_backend
 from sglang.multimodal_gen.runtime.layers.usp import (
+    _begin_comm_region,
     _get_comm_activity_tracker,
     _get_comm_quiesce_fn,
-    _mark_comm_end,
-    _mark_comm_start,
+    _finish_comm_region,
     _quiesce_prefetch_for_comm,
+    _record_comm_region_start,
     _usp_input_all_to_all,
     _usp_output_all_to_all,
     ring_attn,
@@ -45,14 +46,15 @@ def _comm_aware_sequence_all_to_all_4d(
 ) -> torch.Tensor:
     tracker = _get_comm_activity_tracker()
     quiesce_fn = _get_comm_quiesce_fn()
-    _mark_comm_start(tracker, tag)
+    comm_region = _begin_comm_region(tracker, tag)
     try:
         _quiesce_prefetch_for_comm(quiesce_fn)
+        _record_comm_region_start(comm_region)
         return sequence_model_parallel_all_to_all_4D(
             x, scatter_dim=scatter_dim, gather_dim=gather_dim
         )
     finally:
-        _mark_comm_end(tracker, tag)
+        _finish_comm_region(tracker, tag, comm_region)
 
 
 @torch.compiler.disable
@@ -61,12 +63,13 @@ def _comm_aware_sequence_all_gather(
 ) -> torch.Tensor:
     tracker = _get_comm_activity_tracker()
     quiesce_fn = _get_comm_quiesce_fn()
-    _mark_comm_start(tracker, tag)
+    comm_region = _begin_comm_region(tracker, tag)
     try:
         _quiesce_prefetch_for_comm(quiesce_fn)
+        _record_comm_region_start(comm_region)
         return sequence_model_parallel_all_gather(x, dim=dim)
     finally:
-        _mark_comm_end(tracker, tag)
+        _finish_comm_region(tracker, tag, comm_region)
 
 
 class UlyssesAttention(nn.Module):

@@ -300,6 +300,7 @@ class ServerArgs:
     dit_offload_resident_phases: str = ""
     dit_offload_phase_prefetch_depth: int = 4
     dit_offload_resident_ratio: float | None = None
+    dit_comm_active_window_mode: str = "kernel"
     text_encoder_cpu_offload: bool | None = None
     image_encoder_cpu_offload: bool | None = None
     vae_cpu_offload: bool | None = None
@@ -823,6 +824,15 @@ class ServerArgs:
             "Using 4 matches the current Wan block phase count and effectively permits whole-layer prefetch.",
         )
         parser.add_argument(
+            "--dit-comm-active-window-mode",
+            type=str,
+            choices=["kernel", "launch"],
+            default=ServerArgs.dit_comm_active_window_mode,
+            help="Scope used by comm-aware H2D yielding. "
+            "'kernel' keeps H2D paused until the collective's stream-level completion event; "
+            "'launch' restores the older behavior that only tracks the host-side collective wrapper.",
+        )
+        parser.add_argument(
             "--use-fsdp-inference",
             action=StoreBoolean,
             help="Use FSDP for inference by sharding the model weights. Latency is very low due to prefetch--enable if run out of memory.",
@@ -1115,6 +1125,10 @@ class ServerArgs:
         if self.dit_layerwise_offload:
             if self.dit_offload_prefetch_size < 0.0:
                 raise ValueError("dit_offload_prefetch_size must be non-negative")
+            if self.dit_comm_active_window_mode not in {"kernel", "launch"}:
+                raise ValueError(
+                    "dit_comm_active_window_mode must be either 'kernel' or 'launch'"
+                )
             if self.dit_offload_phase_prefetch_depth < 1:
                 logger.info(
                     "Invalid --dit-offload-phase-prefetch-depth value passed, clamped to 1."
