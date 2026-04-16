@@ -28,6 +28,7 @@ from sglang.multimodal_gen.runtime.layers.usp import (
     _get_comm_quiesce_fn,
     _finish_comm_region,
     _block_work_on_current_stream,
+    _set_comm_region_work,
     _tracker_uses_kernel_window,
     _quiesce_prefetch_for_comm,
     _record_comm_region_start,
@@ -46,11 +47,11 @@ from sglang.multimodal_gen.utils import get_compute_dtype
 @torch.compiler.disable
 def _sequence_all_to_all_4d_blocking_current_stream(
     x: torch.Tensor, scatter_dim: int, gather_dim: int
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, object | None]:
     group = get_sp_group()
     world_size = group.world_size
     if world_size == 1:
-        return x
+        return x, None
 
     assert x.dim() == 4, f"input must be 4D tensor, got {x.dim()} and shape {x.shape}"
     device_group = group.device_group
@@ -64,7 +65,7 @@ def _sequence_all_to_all_4d_blocking_current_stream(
         work = dist.all_to_all_single(output, x, group=device_group, async_op=True)
         _block_work_on_current_stream(work)
         output = torch.cat(output.split(shard_hn), dim=1)
-        return output.transpose(0, 2).contiguous()
+        return output.transpose(0, 2).contiguous(), work
 
     if scatter_dim == 1 and gather_dim == 2:
         _, seqlen, shard_hn, _ = x.shape
@@ -79,7 +80,7 @@ def _sequence_all_to_all_4d_blocking_current_stream(
         output = torch.empty_like(x)
         work = dist.all_to_all_single(output, x, group=device_group, async_op=True)
         _block_work_on_current_stream(work)
-        return output.transpose(0, 2).contiguous()
+        return output.transpose(0, 2).contiguous(), work
 
     raise RuntimeError(
         f"Invalid scatter_dim={scatter_dim}, gather_dim={gather_dim}. "
@@ -90,11 +91,11 @@ def _sequence_all_to_all_4d_blocking_current_stream(
 @torch.compiler.disable
 def _sequence_all_gather_blocking_current_stream(
     x: torch.Tensor, dim: int
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, object | None]:
     group = get_sp_group()
     world_size = group.world_size
     if world_size == 1:
-        return x
+        return x, None
 
     assert -x.dim() <= dim < x.dim(), f"Invalid dim ({dim}) for input tensor with shape {x.size()}"
     if dim < 0:
@@ -116,7 +117,7 @@ def _sequence_all_gather_blocking_current_stream(
         output = output.movedim(0, dim)
 
     input_size[dim] *= world_size
-    return output.reshape(input_size)
+    return output.reshape(input_size), work
 
 
 @torch.compiler.disable
@@ -132,9 +133,11 @@ def _comm_aware_sequence_all_to_all_4d(
             after_drain=lambda: _record_comm_region_start(comm_region),
         )
         if _tracker_uses_kernel_window(tracker):
-            return _sequence_all_to_all_4d_blocking_current_stream(
+            result, work = _sequence_all_to_all_4d_blocking_current_stream(
                 x, scatter_dim=scatter_dim, gather_dim=gather_dim
             )
+            _set_comm_region_work(comm_region, work)
+            return result
         return sequence_model_parallel_all_to_all_4D(
             x, scatter_dim=scatter_dim, gather_dim=gather_dim
         )
@@ -155,7 +158,9 @@ def _comm_aware_sequence_all_gather(
             after_drain=lambda: _record_comm_region_start(comm_region),
         )
         if _tracker_uses_kernel_window(tracker):
-            return _sequence_all_gather_blocking_current_stream(x, dim=dim)
+            result, work = _sequence_all_gather_blocking_current_stream(x, dim=dim)
+            _set_comm_region_work(comm_region, work)
+            return result
         return sequence_model_parallel_all_gather(x, dim=dim)
     finally:
         _finish_comm_region(tracker, tag, comm_region)

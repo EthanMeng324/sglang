@@ -23,16 +23,19 @@ class _KernelCommRegion:
         self._end_event = torch.cuda.Event()
         self._finalized = False
         self._active_started = False
+        self._nccl_work: Any = None
 
     def record_start(self) -> None:
         if self._active_started:
             return
-        # In kernel-window mode, the "start" side does not need a timestamp.
-        # The important transition is simply: after quiesce has drained in-flight
-        # H2D and while launch guards are still held, flip the tracker to active
-        # so no new H2D can be launched until the end-event completes.
         self._tracker._block_launches_start()
         self._active_started = True
+
+    def set_nccl_work(self, work: Any) -> None:
+        """Attach an NCCL Work handle so the active window extends until the
+        collective truly completes on the GPU, not just until the host-side
+        launch returns."""
+        self._nccl_work = work
 
     def finalize(self) -> None:
         if self._finalized:
@@ -40,8 +43,13 @@ class _KernelCommRegion:
         self._finalized = True
         if not self._active_started:
             return
-        self._end_event.record(torch.cuda.current_stream())
-        self._tracker._enqueue_kernel_region(self._tag, self._end_event)
+        if self._nccl_work is not None:
+            self._tracker._enqueue_kernel_region(
+                self._tag, None, nccl_work=self._nccl_work
+            )
+        else:
+            self._end_event.record(torch.cuda.current_stream())
+            self._tracker._enqueue_kernel_region(self._tag, self._end_event)
 
 
 class CommunicationActivityTracker:
@@ -57,7 +65,7 @@ class CommunicationActivityTracker:
         self._active = 0
         self._patch_state: Dict[str, Any] | None = None
         self._window_mode = _normalize_window_mode(window_mode)
-        self._event_q: queue.Queue[tuple[torch.cuda.Event, str]] | None = None
+        self._event_q: queue.Queue[tuple[torch.cuda.Event | None, str, Any]] | None = None
         self._event_stop_event: threading.Event | None = None
         self._event_thread: threading.Thread | None = None
         if self._window_mode == "kernel" and torch.cuda.is_available():
@@ -89,35 +97,53 @@ class CommunicationActivityTracker:
                 self._active -= 1
             self._cv.notify_all()
 
-    def _enqueue_kernel_region(self, tag: str, end_event: torch.cuda.Event) -> None:
+    def _enqueue_kernel_region(
+        self,
+        tag: str,
+        end_event: torch.cuda.Event | None,
+        *,
+        nccl_work: Any = None,
+    ) -> None:
         if self._event_q is None:
-            # Fallback if kernel-window tracking could not be initialized.
             self._block_launches_end()
             return
-        self._event_q.put((end_event, tag))
+        self._event_q.put((end_event, tag, nccl_work))
+
+    @staticmethod
+    def _region_completed(
+        end_event: torch.cuda.Event | None, nccl_work: Any
+    ) -> bool:
+        if nccl_work is not None:
+            try:
+                return nccl_work.is_completed()
+            except Exception:
+                return True
+        if end_event is not None:
+            return end_event.query()
+        return True
 
     def _kernel_event_loop(self) -> None:
         assert self._event_q is not None
         assert self._event_stop_event is not None
-        pending: list[tuple[torch.cuda.Event, str]] = []
+        _completed = self._region_completed
+        pending: list[tuple[torch.cuda.Event | None, str, Any]] = []
         while True:
             made_progress = False
             while True:
                 try:
-                    end_event, tag = self._event_q.get_nowait()
+                    item = self._event_q.get_nowait()
                 except queue.Empty:
                     break
-                pending.append((end_event, tag))
+                pending.append(item)
                 made_progress = True
 
-            next_pending: list[tuple[torch.cuda.Event, str]] = []
-            for end_event, tag in pending:
-                if end_event.query():
+            next_pending: list[tuple[torch.cuda.Event | None, str, Any]] = []
+            for end_event, tag, nccl_work in pending:
+                if _completed(end_event, nccl_work):
                     self._block_launches_end()
                     made_progress = True
                     continue
-
-                next_pending.append((end_event, tag))
+                next_pending.append((end_event, tag, nccl_work))
             pending = next_pending
 
             if self._event_stop_event.is_set() and not pending:
@@ -125,10 +151,10 @@ class CommunicationActivityTracker:
             if made_progress:
                 continue
             try:
-                end_event, tag = self._event_q.get(timeout=0.001)
+                item = self._event_q.get(timeout=0.001)
             except queue.Empty:
                 continue
-            pending.append((end_event, tag))
+            pending.append(item)
 
     def mark_start(self, _tag: str | None = None) -> None:
         with self._cv:

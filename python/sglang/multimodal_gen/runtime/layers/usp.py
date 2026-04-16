@@ -114,6 +114,16 @@ def _tracker_uses_kernel_window(tracker) -> bool:
 
 
 @torch.compiler.disable
+def _set_comm_region_work(region, work) -> None:
+    """Attach an NCCL Work handle to a kernel-window comm region so the active
+    window extends until the collective truly completes on the GPU."""
+    if region is not None and work is not None:
+        set_fn = getattr(region, "set_nccl_work", None)
+        if callable(set_fn):
+            set_fn(work)
+
+
+@torch.compiler.disable
 def _block_work_on_current_stream(work) -> None:
     if work is None:
         return
@@ -167,6 +177,7 @@ def _usp_all_to_all_single(x: torch.Tensor, tag: str) -> torch.Tensor:
             output = torch.empty_like(x)
             work = dist.all_to_all_single(output, x, group=ulysses_pg, async_op=True)
             _block_work_on_current_stream(work)
+            _set_comm_region_work(comm_region, work)
             x = output
         else:
             x = ft_c.all_to_all_single(
