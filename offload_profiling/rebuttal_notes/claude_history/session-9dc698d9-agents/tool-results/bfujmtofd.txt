@@ -1,0 +1,218 @@
+############################## HARNESS ##############################
+# ChunkFlow experiment harness (`/workspace/sglang/offload_profiling/`)
+
+## 1. How the paper's experiments are launched
+
+Everything goes through the `sglang generate` CLI (console script `sglang = "sglang.cli.main:main"`, `python/pyproject.toml:157` -> `python/sglang/cli/generate.py` -> `sglang.multimodal_gen.runtime.entrypoints.cli.generate.generate_cmd`), wrapped in Nsight Systems. The canonical paper command (from `offload_profiling/run_access.sh:159-168`) is:
+
+```bash
+nsys profile --trace=cuda,nvtx,osrt --cuda-memory-usage=true \
+  --trace-fork-before-exec=true --kill=none --force-overwrite=true \
+  --output="$NSYS_OUTPUT_PREFIX" \
+  sglang generate \
+    --model-path "$MODEL_PATH" --text-encoder-cpu-offload --pin-cpu-memory \
+    --dit-layerwise-offload true --dit-offload-prefetch-size 1 \
+    --num-gpus "$NUM_GPUS" --ulysses-degree "$ULYSSES_DEGREE" \
+    --attention-backend "$ATTENTION_BACKEND" \
+    --prompt "$PROMPT" --num-outputs-per-prompt "$NUM_OUTPUTS_PER_PROMPT" \
+    --num-frames "$NUM_FRAMES" --height "$HEIGHT" --width "$WIDTH" \
+    --num-inference-steps "$NUM_INFERENCE_STEPS" \
+    --guidance-scale "$GUIDANCE_SCALE" [--guidance-scale-2 "$GUIDANCE_SCALE_2"] \
+    [--enable-torch-compile] \
+    --perf-dump-path "$PERF_OUT" \
+    --output-path "$OUTPUT_DIR" --output-file-name "$OUTPUT_FILE_NAME" [--no-save-output]
+```
+
+Shared defaults come from `offload_profiling/model_profile_common.sh`:
+- Prompt: `"A cat walks on the grass, realistic"` (lines 79, 110). `NUM_GPUS=2`, `ULYSSES_DEGREE=2`, `ATTENTION_BACKEND=sage_attn`, batch 1 (lines 111-114).
+- Model resolution (`resolve_profile_model`, lines 25-107) - hardcoded TAMU-cluster paths with env overrides:
+  - `wanvideo`: `WANVIDEO_MODEL_PATH` or `/scratch/user/u.hm347392/model{,s}/Wan2.2-TI2V-5B-Diffusers` (lines 35-41)
+  - `flux`: `FLUX_MODEL_PATH` or `.../FLUX.1-dev` (43-49); `flux_2`: `FLUX_2_MODEL_PATH` or `.../FLUX.2-klein-4B` (51-57); `hunyuanvideo`: `HUNYUANVIDEO_MODEL_PATH` or `.../HunyuanVideo` (59-65). `MODEL_PATH` overrides all and may be an HF repo id (the standalone `run.sh:42` defaults to `Wan-AI/Wan2.2-TI2V-5B-Diffusers`). Registry-known HF ids: `Wan-AI/Wan2.2-TI2V-5B-Diffusers` (`python/sglang/multimodal_gen/registry.py:529`), `hunyuanvideo-community/HunyuanVideo` (:454), `black-forest-labs/FLUX.1-dev` (:577), `black-forest-labs/FLUX.2-klein-4B` (:585).
+- Per-model shapes (`apply_profile_model_defaults`, lines 121-151):
+  - wanvideo: `NUM_FRAMES=81`, `HEIGHT=704`, `WIDTH=1280` (704 not 720 - patchify comment at 132-137), `NUM_INFERENCE_STEPS=10`, `GUIDANCE_SCALE=4.0`, `GUIDANCE_SCALE_2=3.0`
+  - hunyuanvideo: 81 frames, 720x1280, 10 steps, gs 1.0
+  - flux/flux_2: 1 frame, 1024x1024, 10 steps, gs 1.0 (and `SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING=1`, `run_access.sh:52-54`)
+- Outputs land in `offload_profiling/results/<model>/` (media) and `offload_profiling/results/profiles/<model>/` (`*_nsys.nsys-rep`, `perf_*_profiled.json`) via `apply_profile_output_layout` (lines 154-171).
+
+The full paper matrix is driven by `offload_profiling/run_profile.sh` (`bash offload_profiling/run_profile.sh <model> [num_frames]` or `--model ... --batch-size ... --resident-ratio ... --steps warmup,no,old,new,ratio,analyze`): warmup dry-run (no-offload, `DRY_RUN=1` via `run_access_no.sh`, separate ports `WARMUP_SERVER_PORT=30100`/`WARMUP_SCHEDULER_PORT=5748`/`WARMUP_MASTER_PORT=30170`, lines 103-105, 245-268), then for video models new -> ratio -> no -> old (lines 300-322; image models run no -> old -> new -> ratio, 270-299), then `analyze_nsys.sh` (323-325). `run_profile_dmon.sh` wraps `run_profile.sh` with background `nvidia-smi dmon` + `nvidia-smi --query-gpu` telemetry and `analyze_clock_drop.py` per-stage summary (lines 159-291).
+
+## 2. What each run*.sh variant does
+
+Two generations of scripts:
+
+**Standalone Wan-only mock-comm trio (older, 1 GPU + emulated comm):** `run.sh`, `run_no.sh`, `run_old.sh`. Defaults `NUM_GPUS=1`, `ULYSSES_DEGREE=1`, `NUM_INFERENCE_STEPS=9`, gs `3.5/4.0`, HF-id model path, `--enable-torch-compile` unconditionally (the guard is commented out, `run.sh:76-78`), and **mock communication enabled** (`SGLANG_WAN_MOCK_COMM_ENABLE=1` default) which fakes Ulysses all-to-all with PCIe D2H/H2D copies sized for a virtual SP degree (`SGLANG_WAN_MOCK_COMM_VIRTUAL_SP_DEGREE=4`), implemented in `python/sglang/multimodal_gen/runtime/models/dits/wanvideo.py:896-946`.
+- `run.sh`: ChunkFlow ("new"): `--dit-layerwise-offload true`, `SGLANG_DIT_COMM_AWARE_OFFLOAD=1`, `SGLANG_DIT_PHASE_AWARE_PREFETCH=1`, chunk 16 MB (lines 86-99).
+- `run_no.sh`: no offload: `--dit-layerwise-offload false`, `SGLANG_DIT_COMM_AWARE_OFFLOAD=0` (lines 62, 87).
+- `run_old.sh`: baseline layerwise offload ("old"): `--dit-layerwise-offload true` but `SGLANG_DIT_COMM_AWARE_OFFLOAD=0` (lines 62-63, 87) - i.e. the original non-chunked prefetcher (`layerwise_offload_original.py`).
+
+**Cluster/real-SP scripts (used for the paper's 2xH100 numbers):** `run_access.sh`, `run_access_no.sh`, `run_access_old.sh`, `run_access_phase.sh` - multi-model (`$1` = model name), NUM_GPUS=2/ULYSSES=2 defaults, mock comm **off** (`SGLANG_WAN_MOCK_COMM_ENABLE:-0`), `--no-save-output` by default (`PROFILE_SAVE_OUTPUT_ARTIFACTS=0`), torch-compile on unless `DISABLE_TORCH_COMPILE=1`/`ENABLE_TORCH_COMPILE=0`. They contain HPC `module purge; module load Miniforge3/... CUDA/12.8.0 GCC/12.3.0` lines (e.g. `run_access.sh:9-12`) that only work on the Lmod cluster.
+- `run_access.sh`: "new" comm-aware run (`SGLANG_DIT_COMM_AWARE_OFFLOAD=1`, `SGLANG_DIT_PHASE_AWARE_PREFETCH=0`, `SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE=kernel`, chunk 16 MB, lines 108-121); with `PROFILE_MODE=ratio` it becomes the partial-residency run (`SGLANG_DIT_OFFLOAD_RESIDENT_RATIO=0.4`, lines 124-126).
+- `run_access_no.sh`: no-offload baseline; also implements the warmup dry run (`DRY_RUN=1`, lines 143-194, no nsys) and unique port overrides `MASTER_PORT_OVERRIDE`/`SERVER_PORT_OVERRIDE`/`SCHEDULER_PORT_OVERRIDE` (lines 69-79).
+- `run_access_old.sh`: old-offload baseline (layerwise on, comm-aware `=0`, lines 55-56, 103).
+- `run_access_phase.sh`: 9-line shim: `exec env PROFILE_MODE=ratio SGLANG_DIT_PHASE_AWARE_PREFETCH=0 SGLANG_DIT_OFFLOAD_RESIDENT_RATIO=0.4 bash run_access.sh "$@"`.
+- `run_profile.sh` / `run_profile_dmon.sh`: orchestrators (above).
+- `analyze_traces.sh` + `trace_analysis/{cpu_trace_overlap,analyze_copy_events,analyze_pcie_bandwidth,analyze_pcie_from_copies}.py`: separate CPU-side analysis of torch-profiler `*.trace.json.gz` traces under `results/traces/`.
+- `nsys_query.py` / `summarize_nsys_csv.py`: ad-hoc SQL queries over nsys sqlite exports (mock vs real NCCL comm critical path) and a compact md report; not on the main `run_profile.sh` path.
+
+## 3. Step time and peak memory measurement
+
+- **Step time (primary)**: NVTX range `SGL_DENOISING_STEP_{i}` emitted per denoising step in `python/sglang/multimodal_gen/runtime/pipelines_core/stages/denoising.py:1031`. `analyze_nsys.sh` -> `summarize_profile_matrix.py` exports each `.nsys-rep` to sqlite (`nsys export --type=sqlite`, lines 215-249), reads `NVTX_EVENTS` matching `SGL_DENOISING_STEP_*` (lines 252-275), drops step 0, detects a "switch-step" outlier (>= 1.15x median, `detect_switch_step` lines 278-289 - catches the Wan2.2 high/low-noise model switch) and reports mean steady step time excluding it (`step_time_s`) plus raw mean (`step_time_raw_s`). Manual overrides: `NO_STEP_TIME_S`/`OLD_STEP_TIME_S`/`NEW_STEP_TIME_S`/`RATIO_STEP_TIME_S` (legacy `PHASE_STEP_TIME_S`).
+- **Peak memory**: from the perf JSON written by `--perf-dump-path` (`perf_new_offload_profiled.json` etc.). `PerfLogger` dumps `memory_checkpoints` (`python/sglang/multimodal_gen/runtime/utils/perf_logger.py:378-395`) recorded in `gpu_worker.py` as `before_forward` (:279), `after_forward` (:302), `mem_analysis` (:159-162), each with `peak_allocated_mb`/`peak_reserved_mb` from torch CUDA allocator stats. `summarize_profile_matrix.py:extract_peak_memory_pair` (lines 175-193) prefers `mem_analysis` > `after_forward` > `before_forward`; env overrides `{NO,OLD,NEW,RATIO}_PEAK_RESERVED_MB` / `..._PEAK_ALLOCATED_MB`. `total_duration_ms` comes from the same JSON.
+- **Accurate host timing**: `SGLANG_DIFFUSION_SYNC_STAGE_PROFILING=1` inserts `torch.cuda.synchronize()` around each denoising step timer (`perf_logger.py:253-300`); `SGLANG_DIFFUSION_STAGE_LOGGING=1` enables stage timing collection even without a dump path; `SGLANG_DIFFUSION_CUDA_EVENT_STEP_PROFILING` (default 1) is the fallback CUDA-event timing.
+- **Comm/prefetch metrics**: `analyze_nsys_step_metrics.py` computes per-run averages within steady step windows: `step_avg_ms`, NCCL kernel time (`%ncclDevKernel_SendRecv%`), NCCL-H2D overlap, "uncovered" H2D (prefetch memcpy time not covered by any compute kernel), and `SGL_PREFETCH_WAIT_COMM_BG` NVTX time; prefetch streams identified via NVTX markers `SGL_PREFETCH_H2D{,_BG,_SYNC,_CHUNK}` (lines 15-23, 254-307, 330-460).
+- **Final artifacts**: `results/profiles/<model>/analysis/analysis_summary.md` (matrix + step metrics), `analysis_summary_matrix.md`, `analysis_summary_step_metrics.md`, `profile_matrix.csv` (`analyze_nsys.sh:159-175`). `ANALYZE_RUNS_CSV=no,old,new,ratio` selects a subset.
+
+## 4. Mode-controlling env vars (as consumed by the code)
+
+Read in `python/sglang/multimodal_gen/runtime/utils/layerwise_offload_chunkwise.py:2010-2110` and `layerwise_offload.py:14`:
+- `SGLANG_DIT_COMM_AWARE_OFFLOAD` - master switch; ALSO selects the implementation module at import time (`layerwise_offload.py:14`: chunkwise vs original). There is **no CLI flag** for it - env only.
+- `SGLANG_DIT_PHASE_AWARE_PREFETCH` - phase-aware prefetch (only meaningful with comm-aware; run_access uses 0, run.sh uses 1).
+- `SGLANG_DIT_COMM_PREFETCH_CHUNK_SIZE_MB` - chunk size C (code default 32; all scripts set 16 = paper default).
+- `SGLANG_DIT_OFFLOAD_RESIDENT_RATIO` - partial residency fraction in [0,1] (0 -> disabled); scripts use 0.4 for the "ratio" run. CLI twin `--dit-offload-resident-ratio` (`server_args.py:302,814`).
+- `SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE` = `kernel`|`launch` (how long H2D stays paused around a collective; CLI `--dit-comm-active-window-mode`, `server_args.py:303,830`).
+- `SGLANG_DIT_COMM_AWARE_PATCH_TORCH_DIST`, `SGLANG_DIT_OFFLOAD_PHASE_PREFETCH_DEPTH`, `SGLANG_DIT_OFFLOAD_RESIDENT_PHASES` - secondary knobs.
+- Offload on/off itself is the CLI flag `--dit-layerwise-offload true|false` plus `--dit-offload-prefetch-size 1` (`server_args.py:298-299`).
+- Mock comm (Wan only, `wanvideo.py:896-946`): `SGLANG_WAN_MOCK_COMM_ENABLE`, `_EVERY_N_BLOCKS`, `_DEBUG`, `_PCIE_MB`, `_VIRTUAL_SP_DEGREE` (clamped >= 2), `_TRAFFIC_SCALE`, `_MAX_MB`.
+- Dead vars (exported by scripts, no consumer anywhere in `python/`): `SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES`, `SGLANG_DIT_COMM_PREFETCH_SUBMODULE_GRANULARITY`.
+- `SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING` (flux image models; `runtime/layers/visual_embedding.py:39`).
+
+## 5. Changes needed to run on this 4x RTX 5090 box (SP 2 and 4)
+
+1. **Delete/guard the `module purge` / `module load` blocks** in `run_access.sh:9-12`, `run_access_no.sh:9-12`, `run_access_old.sh:9-12`, `analyze_nsys.sh:4-7` - `module` doesn't exist here and `set -euo pipefail` will abort the scripts immediately.
+2. **Model paths**: the `/scratch/user/u.hm347392/...` defaults don't exist. Either `export WANVIDEO_MODEL_PATH=... FLUX_MODEL_PATH=... FLUX_2_MODEL_PATH=... HUNYUANVIDEO_MODEL_PATH=...` pointing at local snapshots, or set `MODEL_PATH` to the HF ids (`Wan-AI/Wan2.2-TI2V-5B-Diffusers`, `hunyuanvideo-community/HunyuanVideo`, `black-forest-labs/FLUX.1-dev` [gated - needs HF token], `black-forest-labs/FLUX.2-klein-4B`); downloads go to `HF_HOME=/workspace/.hf_home` (already exported on this box). Note `resolve_profile_model` only *falls back* to the cluster dirs, so env vars are sufficient - no edit required for paths.
+3. **SP degree**: `export NUM_GPUS=2 ULYSSES_DEGREE=2` (already the run_access default) or `NUM_GPUS=4 ULYSSES_DEGREE=4`. `sp_degree` is auto-derived as `num_gpus/(dp*tp)` and `ulysses_degree` auto-set to `sp_degree` (`server_args.py:511-529`); `num_gpus` must be divisible by `sp_degree` (`server_args.py:1164-1166`).
+4. **GPU selection**: `CUDA_VISIBLE_DEVICES` is honored (`runtime/platforms/cuda.py:41-47`); use e.g. `CUDA_VISIBLE_DEVICES=0,1` for the SP=2 runs and `DMON_GPU_IDS` for the dmon wrapper.
+5. **Python env**: scripts auto-source `$REPO_ROOT/.venv/bin/activate` if present (`run.sh:17-20`, `run_access.sh:16-19`) - **it does not exist yet**, and neither sglang nor torch is installed in `/venv/main`. You must create `/workspace/sglang/.venv` with a Blackwell-capable stack: torch cu128+ (sm_120), `pip install -e python` (diffusion extra), and SageAttention built for sm_120 - or override `ATTENTION_BACKEND` (e.g. `fa` or `torch_sdpa`) if sage_attn won't build. `nsys` is already at `/usr/local/bin/nsys` (2025.3.1).
+6. **Memory headroom**: 32 GB vs the paper's 80 GB H100s - the `no`-offload baseline and the full-resident warmup may OOM for HunyuanVideo (13B DiT) at 720x1280x81; consider `--steps` subsets, smaller `NUM_FRAMES`, or accepting that the no-offload column is only feasible for Wan 5B / Flux at SP>=2.
+7. Use the `run_access*` / `run_profile.sh` family (real NCCL comm, mock comm off) for the rebuttal, not the `run.sh` trio (single-GPU mock-comm emulation). Comparing SP=2 vs SP=4 needs nothing beyond `NUM_GPUS`/`ULYSSES_DEGREE` and distinct `RESULTS_DIR`/`PROFILES_DIR` (or `NSYS_OUTPUT_PREFIX`/`PERF_OUT`) per degree so runs don't overwrite each other - output filenames encode only model+mode, not SP degree.
+
+--- CAVEATS ---
+ * No usable Python environment exists yet: /workspace/sglang/.venv is absent and /venv/main has neither torch nor sglang installed. Scripts hard-require `sglang` and `nsys` on PATH; nsys 2025.3.1 is installed, the rest must be set up (torch cu128+ for Blackwell sm_120, editable install of python/, plus a sm_120-capable SageAttention or a different --attention-backend).
+ * run_access*.sh and analyze_nsys.sh begin with `module purge; module load ...` (TAMU cluster Lmod). Under `set -euo pipefail` these lines abort on this box - they must be removed or guarded before anything runs.
+ * Default model paths point at /scratch/user/u.hm347392/... and do not exist here; set WANVIDEO_MODEL_PATH / FLUX_MODEL_PATH / FLUX_2_MODEL_PATH / HUNYUANVIDEO_MODEL_PATH or MODEL_PATH (HF repo ids work; FLUX.1-dev is gated and needs an HF token). /workspace is NOT volume-backed persistence-verified - check `vast-capabilities | jq '.instance.workspace_is_volume'` before assuming downloads survive a recycle.
+ * Output file names encode model+mode but not SP degree: running SP=2 then SP=4 with the same RESULTS_DIR overwrites .nsys-rep and perf JSONs. Use separate RESULTS_DIR/PROFILES_DIR (or NSYS_OUTPUT_PREFIX/PERF_OUT/VIDEO_OUT) per degree.
+ * 32 GB RTX 5090 vs 80 GB H100: the no-offload baseline and the full-resident warmup may OOM, especially HunyuanVideo (13B DiT) at 720x1280x81; plan for --steps subsets or reduced NUM_FRAMES, and expect PCIe (not NVLink) NCCL all-to-all, which changes comm/prefetch contention characteristics vs the paper.
+ * The `run.sh`/`run_no.sh`/`run_old.sh` trio is the legacy single-GPU harness with SGLANG_WAN_MOCK_COMM_ENABLE=1 (fake all-to-all at virtual SP degree 4) - do not use it for real SP-degree rebuttal numbers; use run_access*/run_profile.sh where mock comm defaults to 0.
+ * SGLANG_DIT_COMM_AWARE_OFFLOAD is read at module import time (layerwise_offload.py:14) to choose the implementation, and has no CLI flag - it must be in the environment before the sglang process starts.
+ * Two env vars exported by the scripts are dead code (no consumer in python/): SGLANG_DIFFUSION_LOG_DENOISING_STEP_TIMES and SGLANG_DIT_COMM_PREFETCH_SUBMODULE_GRANULARITY - don't rely on them.
+ * Chunk size default mismatch: code default is 32 MB (dit_comm_prefetch_chunk_size_mb) but every script overrides to SGLANG_DIT_COMM_PREFETCH_CHUNK_SIZE_MB=16 (the paper's C=16MB) - keep the env var set when running manually.
+ * run.sh/run_no.sh/run_old.sh mkdir/chmod /tmp/data/tmp and repoint TMPDIR there; harmless here but nsys intermediate files can be large - ensure disk space.
+ * torch.compile is enabled unconditionally in the legacy trio and by default in run_access* (disable with DISABLE_TORCH_COMPILE=1); first-run compile time inflates total_duration_ms but not steady step time (step 0 and the switch-step outlier are excluded by the summarizer).
+ * summarize_profile_matrix.py's switch-step outlier detection (>=1.15x median) exists for Wan2.2's two-expert switch; at different step counts/hardware verify it excludes the right step (columns switch_step_idx/steady_step_count in profile_matrix.csv).
+
+############################## DOCS-HISTORY ##############################
+# ChunkFlow fork state (branch `v0.5.9-shard`, EthanMeng324/sglang)
+
+## 1. Fork topology
+- Remote: `git@github.com:EthanMeng324/sglang.git`; branch `v0.5.9-shard` (clean tree at HEAD `1e58a0348`).
+- Fork point from upstream sglang: **`bbe9c7eeb`** ("Revert 'Refactor graph input buffers (#18991)' (#19173)") — an upstream commit in the v0.5.9 era (no v0.5.9 tag is fetched locally; `git describe` gives `v0.5.5.post3-2953-gbbe9c7eeb`). The local `main`'s merge-base (`eb1d88540`, Nov 2025) is stale — use `bbe9c7eeb` as the true divergence point.
+- **79 commits** on top of the fork point; `git diff --stat bbe9c7eeb..HEAD` = 41 files, **+14,367 / -649** lines. All changes are confined to `python/sglang/multimodal_gen/runtime/**` plus a new top-level `offload_profiling/` experiment directory. Core SGLang LLM serving is untouched.
+- Work spans **Mar 4 – Apr 16, 2026** (single author, jackmenghan@gmail.com). `preprint.pdf` and `chunkflow_review.pdf` sit in repo root.
+
+## 2. Commit arc (what was built, in order)
+1. **`93aeaa580` (Mar 4)** "support chunk-wise prefetching" — the initial ChunkFlow implementation: `layerwise_offload_chunkwise.py` (chunked, pauseable H2D prefetch on a dedicated copy stream + background worker thread), `comm_aware_prefetch.py` (CommunicationActivityTracker), comm wrappers in `usp.py` / `attention/layer.py`.
+2. **Early–mid Mar** — profiling infra (`e6e42aaa9`, `df97fed90` "profiling for nccl", `c7d864642` "compare with no offloading"), nsys analysis scripts.
+3. **Mid Mar** — phase-wise pipelining (`46bdce198`), phase prefetch depth setting (`25af73d41`), phase run mode (`6253f3aca`), peak-allocated-memory in perf dumps (`da141f1d0`).
+4. **`903bfd51d` (late Mar)** "support wan, flux, and hunyuan" — multi-model coverage; `9283eab14` total-time summarization.
+5. **Apr 1–2** — dry-run warmup (`821208058`, `e62a0a62a`), torch.compile disable switch (`6b16c097a`), `nvidia-smi dmon` runner (`6f8d86f94`), Flux batch-size sweeps (`9bfc2a2fc`), GPU clock-drop analysis (`bc216a72c`).
+6. **Apr 12–13 pivot** — **`2be33db7e` "chunk granularity resident and prefetch"**: partial residency re-expressed at 16 MB-chunk granularity (tensorwise resident prefix, `--dit-offload-resident-ratio`); **`ca2bf9ed4` "deprecate phase"**: the semantic-phase resident mode is retired from the profiling matrix in favor of ratio-resident (phase-aware code still exists behind `SGLANG_DIT_PHASE_AWARE_PREFETCH`, default off).
+7. **Apr 14–16 final push (the in-progress frontier)** — `80b38ce52` VAE precision pass-through; **`7468b8b1b` "add comm-window-mode kernel"** (new `--dit-comm-active-window-mode {kernel,launch}`); **`5a6e73af3`** kernel-window end marker; **`94da08ee2` "monitor work complete marker"** (background thread waits on the actual NCCL work object / CUDA event to mark comm end, instead of the host wrapper return); `0319d38b4`/`4062948b4`/`2e994c91a` step-metrics analyzer; **`a732f1845` "add doc"** (the two findings docs); `3c98f0c33` "fix mem" (comm_aware_prefetch memory fix), `d2b252c7d`, `1e58a0348` (profiling-script fixes). Everything after the docs commit landed **the same evening** — the kernel-window path is the newest, least-validated code.
+
+## 3. Architecture (how ChunkFlow is wired)
+- `utils/layerwise_offload.py` is now a **runtime dispatcher**: env `SGLANG_DIT_COMM_AWARE_OFFLOAD=1` selects `layerwise_offload_chunkwise.py` (2,270 lines, "new"); otherwise `layerwise_offload_original.py` (859 lines, preserved as the "old" baseline).
+- Chunkwise manager: CPU-pinned per-layer buckets split into chunks (`SGLANG_DIT_COMM_PREFETCH_CHUNK_SIZE_MB`, **16 in scripts**; the server-arg fallback default in code is 32); background `_prefetch_worker_loop()` checks `_wait_for_comm_inactive()` before each chunk; collectives call `quiesce_prefetch_for_comm()` → `quiesce_copy_stream_for_comm()` (current stream waits on copy stream). Per-step CUDA-event stats (copy bytes, wait-comm time, exposed waits) are exported through `gpu_worker._collect_offload_profile_metrics()` into the perf JSON `extra.offload_profile`.
+- `comm_aware_prefetch.py`: `CommunicationActivityTracker` with two window modes — **"launch"** (active only during the host-side collective wrapper; the original paper-era behavior) and **"kernel"** (default at HEAD; `begin_kernel_region()` + NCCL-work wait loop + kernel event loop keep H2D paused until the collective's stream-level completion). Optional `patch_torch_distributed()` monkeypatch.
+- Comm entry points: `layers/usp.py` (USP all-to-all — Wan, Flux; NVTX `SGL_REAL_COMM_USP_DEV{n}`, device-index parameterized, not hard-coded to 2 ranks) and `layers/attention/layer.py` (`UlyssesAttention` — HunyuanVideo).
+- Models: `wanvideo.py` (+359 lines: `BLOCK_PHASE_SPECS` = entry / self_attn_tail / cross_attn / ffn, plus a **mock-comm subsystem** `SGLANG_WAN_MOCK_COMM_*` that injects synthetic PCIe D2H round-trips to emulate a *virtual SP degree* — directly relevant for emulating comm pressure), `flux.py`, `flux_2.py`, `hunyuanvideo.py` similarly instrumented.
+- `stages/denoising.py`: NVTX `SGL_DENOISING_LOOP` / `SGL_DENOISING_STEP_{i}` ranges + per-step offload-profile index (analysis uses steady-state steps 1–9).
+- New server args: `--dit-offload-resident-phases`, `--dit-offload-resident-ratio`, `--dit-offload-phase-prefetch-depth` (default 4 = Wan phase count), `--dit-comm-active-window-mode` (default "kernel"). Env vars override all of them.
+
+## 4. Finished vs in-progress
+**Finished/stable:** chunked comm-aware prefetch in launch-window mode; old/new/no/ratio profiling matrix across 4 models; chunk-granularity resident ratio; nsys + perf-JSON analysis pipeline; dry-run warmup; dmon monitoring.
+
+**In progress at HEAD (critical for rebuttal):** the **kernel-window comm mode**. `comm_aware_trace_findings.md` (§5–6) documents that the launch-window "new" path still had **massive real H2D/NCCL overlap** (e.g. Flux bs=8: ~62% of NCCL time overlapped, ~276 ms/rank/step NCCL inflation) because `mark_end` fired at kernel *launch*, ~200–1000 ms before the NCCL kernel actually ran. The **first** kernel-window attempt was *slower* (Flux bs=8: 2.011 vs 1.895 s/step — start too early, end still on the wrong stream; §6.6). Commits `94da08ee2` + `3c98f0c33` (NCCL-work completion monitoring, mem fix) landed **after** that doc was written — whether HEAD's kernel-window now wins has **not been validated by any recorded analysis**. Also §8–9: **Flux is flagged as a poor validation target** (NCCL inflation dominates `new - no`); Wan and Hunyuan are the clean positive examples.
+
+## 5. How the paper's numbers were produced
+- Driver: `offload_profiling/run_profile.sh <model> [--num-frames|--batch-size|--resident-ratio|--comm-window-mode|--steps]` → warmup(dry-run) → no → old → new → ratio-resident → analyze. Each run is wrapped in `nsys profile --trace=cuda,nvtx,osrt`; outputs to `offload_profiling/results/<model>/` and `.../profiles/<model>/` (perf JSON `perf_*_profiled.json`, `analysis_summary.md`, `profile_matrix.csv`). The results dir is currently **empty** — no paper artifacts are in the repo.
+- Defaults (`model_profile_common.sh`): **`NUM_GPUS=2`, `ULYSSES_DEGREE=2`** (both env-overridable — SP=4 should just be `NUM_GPUS=4 ULYSSES_DEGREE=4`), `ATTENTION_BACKEND=sage_attn`, 10 inference steps, torch.compile ON, prompt "A cat walks on the grass, realistic". New/old modes use `--dit-layerwise-offload true --dit-offload-prefetch-size 1 --pin-cpu-memory --text-encoder-cpu-offload`; ratio mode adds `SGLANG_DIT_OFFLOAD_RESIDENT_RATIO=0.4`; chunk size env-pinned to **16 MB**.
+- Models/workloads: Wan2.2-TI2V-5B-Diffusers @704x1280 (note: **704, not 720** — 720 breaks Wan patchify, see comment in `model_profile_common.sh`), 81 frames default; HunyuanVideo @720x1280 (traces used frame_21); FLUX.1-dev @1024x1024 bs 8/16; FLUX.2-klein-4B. Model paths are hard-coded to `/scratch/user/u.hm347392/model/...` (an HPC cluster) — override with `MODEL_PATH` / `WANVIDEO_MODEL_PATH` / `FLUX_MODEL_PATH` / `HUNYUANVIDEO_MODEL_PATH`.
+- Hardware assumptions live **only in the analysis doc**, not in runtime code: `prefetch_comm_contention_analysis.md` §6 calibrates critical sizes for "2xH100" with `P_peak = 756 TFLOP/s`, `BW_peak = 63 GB/s` (PCIe Gen5 x16), ratio 12,000 FLOP/byte → critical points `n*≈37` frames (Wan), `n*≈21` frames (Hunyuan), `b*≈7.5` (Flux). **No H100/PCIe constants are hard-coded in Python runtime code** — the only tuned constant is the 16 MB chunk size (env). For RTX 5090 (~210 TFLOP/s dense bf16, PCIe Gen5) the FLOP/byte ratio drops ~3.6x, so all critical sizes shift substantially and should be re-derived with the doc's closed-form formulas.
+- Two script families: `run_access*.sh` (used by `run_profile.sh`; contain HPC `module purge; module load Miniforge3 / CUDA/12.8.0 / GCC/12.3.0` lines) and older local variants `run.sh`/`run_no.sh`/`run_old.sh` (no modules, use `/tmp/data/tmp`).
+
+## 6. Docs to read first
+- `python/sglang/multimodal_gen/runtime/comm_aware_trace_findings.md` — trace-level post-mortem (Chinese): why new>old, why new<no, the H2D/NCCL-overlap root cause, kernel-window diagnosis, per-model numbers (Wan f81: no=1.302/old=1.886/new=1.483 s; Hunyuan f21: 1.340/1.979/1.601; Flux bs8: 1.624/2.079/1.895; Flux bs16: 3.131/3.437/3.385).
+- `python/sglang/multimodal_gen/runtime/prefetch_comm_contention_analysis.md` — the analytical model (T_comp vs T_pref, per-model FLOPs/bytes breakdowns, critical-size formulas, quiesce placement per model).
+
+--- CAVEATS ---
+ * Environment not set up: sglang is NOT installed in /venv/main and the repo has no .venv; nsys 2025.3.1 IS at /usr/local/bin/nsys. You must install the fork (pip install -e python/) with CUDA>=12.8 wheels for Blackwell sm_120 (this box: 4x RTX 5090 32GB, driver 580.x/CUDA 13).
+ * run_access*.sh (which run_profile.sh drives) begin with 'module purge; module load Miniforge3 / CUDA/12.8.0 / GCC/12.3.0' under set -euo pipefail — on this box 'module' does not exist so every step aborts immediately; patch/remove those lines or define a no-op module shim before running.
+ * Default model paths point to /scratch/user/u.hm347392/model/... (author's HPC cluster). Set MODEL_PATH or WANVIDEO_MODEL_PATH / FLUX_MODEL_PATH / HUNYUANVIDEO_MODEL_PATH; models must be downloaded first (HF_HOME defaults to /workspace/.hf_home per instance config; check workspace_is_volume before trusting persistence).
+ * Default ATTENTION_BACKEND=sage_attn requires the sageattention package with sm_120 support (not in pyproject deps); if unavailable on RTX 5090, override ATTENTION_BACKEND (e.g. fa or torch_sdpa) — but that changes compute time and hence the T_comp/T_pref balance vs the paper runs.
+ * The kernel-window comm mode (now the default, --dit-comm-active-window-mode=kernel) is the least-validated code: the docs show its FIRST version was slower than launch-window (Flux bs8 2.011 vs 1.895 s/step), and the fixes (94da08ee2, 3c98f0c33 'fix mem') landed after the last recorded analysis. For faithful paper-reproduction runs consider --comm-window-mode launch; treat kernel mode results as new territory.
+ * Hardware-model mismatch to plan for: the analysis calibrates 2xH100 (P_peak=756 TFLOP/s, BW_peak=63 GB/s, 12000 FLOP/byte). RTX 5090 has ~3.5x lower FLOP/byte ratio, so critical sizes (Wan n*~37f, Hunyuan n*~21f, Flux b*~7.5) shift down; re-derive from prefetch_comm_contention_analysis.md formulas. No constants need code changes (only the 16MB chunk env var is tuned).
+ * On 4x RTX 5090 there is no NVLink and GeForce lacks P2P: NCCL all-to-all goes over PCIe (possibly staged through host memory), so comm and H2D prefetch now contend for the same PCIe link — a materially different (stronger) contention regime than H100. The SGLANG_WAN_MOCK_COMM_* virtual-SP emulator in wanvideo.py exists precisely for PCIe-comm experiments and may be useful for the rebuttal.
+ * 32GB VRAM vs 80GB H100: the 'no offload' baseline may OOM for HunyuanVideo (~26GB bf16 DiT) and Flux.1-dev (~24GB) at paper workloads; Wan2.2-5B (~10GB) is the safest model. Expect to shrink frames/batch or note baseline OOM as part of the rebuttal story. dit_cpu_offload=true is already forced for image models in run_profile.sh.
+ * Wan must run at HEIGHT=704 (not 720) — 720 trips a scheduler shape mismatch (documented in model_profile_common.sh). Hunyuan traces in the docs used frame_21, not the script default of 81.
+ * SP degree 4 is untested in this repo's history: all recorded runs used NUM_GPUS=2/ULYSSES_DEGREE=2. The env overrides exist (NUM_GPUS=4 ULYSSES_DEGREE=4) and NVTX labels are device-parameterized, but analysis scripts have only ever been exercised on 2-rank traces.
+ * Every profiled run is wrapped in nsys with --cuda-memory-usage=true, which adds overhead; perf JSONs (steady-state step times) are the paper numbers, and nsys traces feed the overlap analysis. offload_profiling/results/ is empty — no reference artifacts to diff against.
+ * Docs and analysis notes are written in Chinese; commit messages are terse ('fix' x30), so the two .md docs are the only reliable record of experimental findings.
+
+############################## MULTIGPU ##############################
+# Multi-GPU (SP=4) and RTX 5090 (sm_120) readiness of the ChunkFlow fork
+
+## 1. Ulysses SP configuration and degree-4 support
+
+**CLI / launcher (diffusion path = `python/sglang/multimodal_gen`)**
+- Flags in `runtime/server_args.py`: `--num-gpus` (L685), `--tp-size` (L691), `--sp-degree` (L697), `--ulysses-degree` (L703), `--ring-degree` (L709). Auto-derivation: `sp_degree = num_gpus / (dp*tp[*2 if cfg-parallel])` (L511-520); if only sp is set, `ulysses_degree = sp_degree` (L522-530); `ring_degree` defaults to 1 (L538-540).
+- Validation (`server_args.py:1163-1209`): `num_gpus % sp_degree == 0` (L1164-1167) and `sp_degree == ring_degree * ulysses_degree` (L1205-1209). **No assert caps degree at 2 anywhere.** So `--num-gpus 4 --ulysses-degree 4` (and 2/2) is accepted.
+- Launch is via the **internal launcher, not torchrun**: `sglang generate` (project script `sglang = sglang.cli.main:main`, `cli/main.py:27-32`) -> `DiffGenerator.from_server_args` -> `launch_server` (`runtime/launch_server.py:61-134`) spawns one `mp.Process` ("spawn") per GPU running `run_scheduler_process`. Each `GPUWorker` sets `MASTER_ADDR=localhost`, `MASTER_PORT`, `RANK`, `WORLD_SIZE=num_gpus` and inits torch.distributed/NCCL via `tcp://127.0.0.1:<master_port>` (`runtime/managers/gpu_worker.py:92-111`); Ulysses/ring NCCL subgroups are built in `runtime/distributed/parallel_state.py:310-476` (`initialize_model_parallel(ulysses_degree=..., ring_degree=...)`). Single-node only (localhost hard-coded) — fine for this box.
+
+**Head-count divisibility for degree 4**
+- The Ulysses all-to-all asserts `h % world_size == 0` (`runtime/layers/usp.py:233-235`) and `s % world_size == 0` on the output a2a (`usp.py:291-293`). Sequence length is padded to a multiple of `sp_size` in the Wan model (`runtime/models/dits/wanvideo.py:1206-1221`), so only heads matter.
+- Wan arch config defaults are the 14B values (`configs/models/dits/wanvideo.py:62-63`: 40 heads x 128 dim), but they are overwritten from the checkpoint's `config.json` via `update_model_arch` (`configs/models/base.py:71-79`). **Wan2.2-TI2V-5B: d=3072, head_dim=128 => 24 heads; 24 % 4 == 0 (6 heads/rank) and 24 % 2 == 0** — degree 4 works. HunyuanVideo: 24 heads (`configs/models/dits/hunyuanvideo.py:157`); Flux: 24 heads (`configs/models/dits/flux.py:18`) — both divisible by 4.
+- Wan self-attention uses `USPAttention` (`wanvideo.py:198,371`), whose a2a goes through `_usp_all_to_all_single` (`usp.py:147-197`) — this is the comm window the offload manager pauses for (tracker + `quiesce_prefetch_for_comm`), and it is world-size agnostic.
+- Note: in-tree test configs only exercise `num_gpus=2` (`multimodal_gen/test/server/testcase_configs.py:574+`); degree 4 is untested by CI but not blocked by code.
+
+## 2. RTX 5090 / sm_120 hardware readiness
+
+Box confirmed: 4x RTX 5090 (cc 12.0), driver 580.159.03 (CUDA 13), system nvcc 13.0, all GPUs "NODE" topology (PCIe via host bridge, **no NVLink, no P2P** — GeForce).
+
+**Attention backend selection** (`runtime/platforms/cuda.py:151-379`, enum in `runtime/platforms/interface.py:26-53`)
+- sm_120 is explicitly detected (`interface.py:147-150`, capability major == 12). On sm_120: explicit `--attention-backend fa` falls back to **Torch SDPA** (`cuda.py:296-300`); default/no-backend also falls back to Torch SDPA (`cuda.py:313-317`). The FA4 CuTe-DSL path (`jit_kernel/flash_attention_v4.py` -> vendored `jit_kernel/flash_attention/cute`, sm100-only helpers) is enabled only for `is_blackwell()` == **sm_100 (B200)**, not 5090 (`cuda.py:301-307,318-324,332-337`).
+- **The paper's backend, `sage_attn` (run scripts default `ATTENTION_BACKEND=sage_attn`, `offload_profiling/run.sh:52`), is the right choice on 5090** — SageAttention 2.2.0 added sm120 support — but it is NOT in any pyproject extra; install manually (`pip install sageattention==2.2.0 --no-build-isolation`, needs nvcc).
+- **Trap:** if `sage_attn` is selected but the package is missing, the fallback at `cuda.py:194` sets `target_backend = FA` *bypassing the sm_120 SDPA guard*; sgl-kernel FA3 then raises `NotImplementedError` at runtime on sm120 (`sgl-kernel/python/sgl_kernel/flash_attn.py:20-33`, `is_fa3_supported` returns False for major 12; call site L328-331). So a missing sageattention crashes rather than silently degrading.
+
+**Custom kernels used by the offload/diffusion path**
+- The ChunkFlow offload machinery itself (`runtime/utils/layerwise_offload_chunkwise.py`, `runtime/utils/comm_aware_prefetch.py`, `usp.py`) is **pure PyTorch** (pinned CPU buffers + `copy_` on a copy stream, CUDA events, NCCL `Work.is_completed()` polling for the `kernel` comm-window mode, `comm_aware_prefetch.py:124-186`) — no custom CUDA, arch-independent. The `jit_kernel/cuda_wait_value.py` kernel is NOT used by this path.
+- `sgl-kernel`: source builds `sm_100a` + `sm_120a` when CUDA >= 12.8 (`sgl-kernel/CMakeLists.txt:219-243`); FA3 sources are sm90a-only (L246-251), consistent with the runtime guard. Pinned `sgl-kernel==0.3.21` wheel (from PyPI) should carry sm_120a for general ops; import succeeds on 5090, only FA3 calls are guarded off.
+- `jit_kernel` JIT compiles via **tvm-ffi `load_inline` with arch taken from the live device** (`jit_kernel/utils.py:156-160,186-191` set `TVM_FFI_CUDA_ARCH_LIST=12.0`) — compiles natively for sm_120 with the system nvcc 13.0; no torch/nvcc major-version mismatch check (it does not use torch cpp_extension).
+- Kernels the Wan forward hits: Triton norm/scale-shift/rotary (`runtime/layers/layernorm.py:23-26`, arch-agnostic), CUDA-C++ timestep embedding (`runtime/layers/visual_embedding.py:25-39`; kill-switch `SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING=1`), fused qknorm with graceful fallback (`jit_kernel/norm.py:66-76`), and **CuTe-DSL `fused_scale_residual_norm_scale_shift`** (`layernorm.py:334,440`; used by every Wan block, `wanvideo.py:395,424,610,639`, taken whenever hidden % 256 == 0 — true for 3072). The CuTe-DSL kernel has only a *shape-based* native fallback, no arch-based one — if `nvidia-cutlass-dsl` cannot target sm_120 it fails at JIT time. Smoke-test this first.
+
+## 3. Torch pin / cu128+ install path
+
+- `python/pyproject.toml:68`: **torch==2.9.1**; uv source mapping (L91-99) uses **PyPI for x86_64** (the PyPI 2.9.1 wheel is the cu128 build => includes sm_120 kernels) and cu129 index only for aarch64. Also pinned: torchaudio 2.9.1, cuda-python==12.9, sgl-kernel==0.3.21, flashinfer 0.6.3, `nvidia-cutlass-dsl>=4.3.4` (needed by CuTe-DSL kernels), transformers 4.57.1. Diffusion extra (`[project.optional-dependencies].diffusion`, L102-116): diffusers 0.36.0, st_attn, vsa, cache-dit, etc. Install: `pip install -e "python[diffusion]"`.
+- Driver CUDA 13.0 runs cu128 wheels fine (minor-version compat). **No torch is currently installed in `/venv/main` on this box** — full env setup is required before any run.
+
+## 4. Hard-coded 2-GPU assumptions in offload/comm-window code
+
+- **None found.** Grepped `layerwise_offload_chunkwise.py`, `layerwise_offload_original.py`, `comm_aware_prefetch.py`, `usp.py`, `attention/layer.py`, `stages/denoising.py` for `== 2` / rank/world-size constants — everything iterates over `world_size`/`sp_size` generically.
+- The only "2"s are in the **single-GPU mock-comm emulation** inside the Wan model: `SGLANG_WAN_MOCK_COMM_VIRTUAL_SP_DEGREE` default 2 (`wanvideo.py:904-906`), fixed PCIe transfer `SGLANG_WAN_MOCK_COMM_PCIE_MB` default 64MB in code (`wanvideo.py:901-903`) / 512MB in scripts, traffic model at `wanvideo.py:1030-1040`. These only apply when `SGLANG_WAN_MOCK_COMM_ENABLE=1`. **For real SP=2/4 runs set `SGLANG_WAN_MOCK_COMM_ENABLE=0`** (note `offload_profiling/run.sh:92` defaults it to 1 with NUM_GPUS=1).
+- Profiling scripts are env-parameterized (`offload_profiling/run.sh:50-51` `NUM_GPUS`, `ULYSSES_DEGREE`); no `CUDA_VISIBLE_DEVICES` pinning anywhere.
+- **Config plumbing gotcha:** the chunkwise comm-aware implementation is selected at *import time* purely by env var `SGLANG_DIT_COMM_AWARE_OFFLOAD` (`runtime/utils/layerwise_offload.py:14`), and `configure_layerwise_offload` reads `dit_comm_aware_offload`/`dit_comm_prefetch_chunk_size_mb` via `getattr` with defaults because those **fields do not exist in ServerArgs** (`layerwise_offload_chunkwise.py:2012-2033`). So the env vars used in run.sh are mandatory: `SGLANG_DIT_COMM_AWARE_OFFLOAD=1`, `SGLANG_DIT_PHASE_AWARE_PREFETCH=1`, `SGLANG_DIT_COMM_PREFETCH_CHUNK_SIZE_MB=16` (code default is 32MB, paper C=16MB), plus CLI `--dit-layerwise-offload true --dit-offload-prefetch-size ... --dit-offload-resident-ratio ...` (`server_args.py:793-830`; `--dit-comm-active-window-mode kernel|launch` at L827, validated at L1128-1130).
+
+## Reproduction recipe sketch (per findings)
+`pip install -e "python[diffusion]"` (torch 2.9.1 cu128) + `pip install sageattention==2.2.0 --no-build-isolation`; then e.g. `SGLANG_DIT_COMM_AWARE_OFFLOAD=1 SGLANG_DIT_PHASE_AWARE_PREFETCH=1 SGLANG_DIT_COMM_PREFETCH_CHUNK_SIZE_MB=16 SGLANG_WAN_MOCK_COMM_ENABLE=0 sglang generate --model-path Wan-AI/Wan2.2-TI2V-5B-Diffusers --num-gpus 4 --ulysses-degree 4 --attention-backend sage_attn --dit-layerwise-offload true --dit-offload-prefetch-size 1 ...` (mirror `offload_profiling/run.sh` flags).
+
+--- CAVEATS ---
+ * No Python env is set up yet: /venv/main has no torch. Install with `pip install -e "python[diffusion]"` (pulls torch 2.9.1 cu128 from PyPI, which supports sm_120), then verify `sgl_kernel` imports on this box; the pinned sgl-kernel==0.3.21 PyPI wheel is expected to include sm_120a but was not verifiable offline — if import/ops fail, build from sgl-kernel/ source (CUDA>=12.8 enables sm_120a).
+ * sageattention is NOT a declared dependency; the paper's sage_attn backend requires `pip install sageattention==2.2.0 --no-build-isolation` (compiles with local nvcc 13.0). If it is missing, selecting sage_attn falls back to FA via cuda.py:194, bypassing the sm_120 guard, and crashes at runtime with NotImplementedError from sgl-kernel FA3 — it does not silently fall back to SDPA.
+ * On sm_120 the default/FA attention backend is Torch SDPA (no FlashAttention build for 5090 in this fork; FA4 CuTe path is sm_100/B200-only). Attention throughput and hence step times will differ from H100 runs regardless of offload settings.
+ * The CuTe-DSL fused_scale_residual_norm_scale_shift kernel (used in every Wan block since 3072%256==0) has no arch-based fallback; if nvidia-cutlass-dsl cannot JIT for sm_120 the run fails. Smoke-test a 1-GPU generation first; Triton and tvm-ffi C++ JIT kernels compile natively for 12.0 and are low-risk (timestep embedding has env kill-switch SGLANG_FORCE_DIFFUSERS_TIMESTEP_EMBEDDING=1).
+ * Comm-aware chunkwise offload is enabled ONLY via env vars (SGLANG_DIT_COMM_AWARE_OFFLOAD=1 selects the implementation at import time; SGLANG_DIT_COMM_PREFETCH_CHUNK_SIZE_MB sets the paper's C=16MB — the code default is 32MB). The corresponding ServerArgs fields do not exist, so forgetting the env vars silently runs the original offload path.
+ * offload_profiling/run*.sh default to NUM_GPUS=1 with mock comm ON (SGLANG_WAN_MOCK_COMM_ENABLE=1, VIRTUAL_SP_DEGREE=4, PCIE_MB=512). For real SP=2/4 runs set SGLANG_WAN_MOCK_COMM_ENABLE=0 and pass NUM_GPUS/ULYSSES_DEGREE; the mock PCIe constants only affect emulation runs.
+ * 4x RTX 5090 are GeForce parts: no NVLink and no PCIe P2P (topology all NODE). NCCL all-to-all will stage through host shared memory, sharing host-DRAM/PCIe bandwidth with the pinned-memory H2D prefetch — comm/prefetch contention is stronger than on 2xH100, so absolute numbers and SP-4 scaling efficiency will differ from the paper (this is arguably favorable for demonstrating ChunkFlow's benefit, but should be framed as commodity-interconnect results).
+ * Each of the 4 worker processes pins its own full CPU copy of the DiT weights (weights are replicated under SP, not sharded): Wan2.2-5B bf16 ~10GB x4 ~= 40GB of pinned host RAM plus text-encoder offload; verify host RAM headroom or set --pin-cpu-memory false (at a prefetch bandwidth cost).
+ * Degree-4 head math is fine for all three paper models (24 heads % 4 == 0 for Wan2.2-TI2V-5B, HunyuanVideo, Flux), but 4-GPU paths have no CI coverage in this fork (test configs stop at num_gpus=2); expect to shake out untested interactions (e.g., CFG + SP=4, VAE gather) rather than hard asserts.
+ * Wan 5B head count (24) relies on the checkpoint config.json overriding the in-repo default of 40 (14B); if a local/converted checkpoint lacks num_attention_heads in config.json the default would break divisibility silently at the usp.py assert.
+ * Torch SDPA fallback disables cudnn SDPA globally (cuda.py:37 torch.backends.cuda.enable_cudnn_sdp(False)), so SDPA uses flash/mem-efficient kernels; fine on sm_120 but another perf difference vs paper hardware.
+

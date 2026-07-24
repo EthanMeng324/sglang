@@ -394,10 +394,16 @@ def post_process_sample(
 
     frames = None
     if isinstance(sample, torch.Tensor):
+        if sample.dim() == 5 and sample.shape[0] == 1:
+            # Tiled VAE decode returns (1, C, T, H, W); drop the batch dim.
+            sample = sample.squeeze(0)
         if sample.dim() == 3:
             sample = sample.unsqueeze(1)
+        # Post-process on CPU: this may run in the client process, which must not
+        # allocate GPU memory while the worker still holds its allocator cache.
+        sample = sample.detach().cpu()
         sample = (sample * 255).clamp(0, 255).to(torch.uint8)
-        videos = sample.permute(1, 2, 3, 0).cpu().numpy()
+        videos = sample.permute(1, 2, 3, 0).numpy()
         frames = list(videos)
     else:
         if not isinstance(sample, np.ndarray):

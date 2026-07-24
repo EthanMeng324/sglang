@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-module purge
+if command -v module >/dev/null 2>&1; then module purge
 module load Miniforge3/25.3.0-3
 module load CUDA/12.8.0
-module load GCC/12.3.0
+module load GCC/12.3.0; fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULTS_DIR="${RESULTS_DIR:-$SCRIPT_DIR/results}"
@@ -162,6 +162,7 @@ python3 "$SCRIPT_DIR/summarize_profile_matrix.py" \
     --old "$OLD_NSYS" \
     --new "$NEW_NSYS" \
     --ratio "$RATIO_NSYS" \
+    --export-dir "$ANALYSIS_DIR/sqlite_cache" \
     --output "$ANALYSIS_DIR/analysis_summary_matrix.md" \
     --csv-output "$ANALYSIS_DIR/profile_matrix.csv"
 

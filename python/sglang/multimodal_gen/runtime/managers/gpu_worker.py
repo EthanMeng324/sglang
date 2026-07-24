@@ -361,6 +361,19 @@ class GPUWorker:
             if output_batch is None:
                 output_batch = OutputBatch()
             output_batch.error = f"Error executing request {req.request_id}: {e}"
+
+        # Move outputs off-GPU before the batch is pickled back to the client:
+        # unpickling a CUDA tensor allocates GPU memory in the receiving process,
+        # which can OOM while this worker still holds its allocator cache.
+        def _to_cpu(t):
+            if isinstance(t, torch.Tensor) and t.is_cuda:
+                return t.detach().cpu()
+            if isinstance(t, (list, tuple)):
+                return type(t)(_to_cpu(x) for x in t)
+            return t
+
+        output_batch.output = _to_cpu(output_batch.output)
+        output_batch.audio = _to_cpu(output_batch.audio)
         return output_batch
 
     def get_can_stay_resident_components(

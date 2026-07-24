@@ -1,6 +1,7 @@
 # Copied and adapted from: https://github.com/hao-ai-lab/FastVideo
 
 # SPDX-License-Identifier: Apache-2.0
+import os
 from dataclasses import dataclass, field
 
 import torch
@@ -86,6 +87,20 @@ class WanVAEConfig(VAEConfig):
     use_parallel_decode: bool = True
 
     def __post_init__(self):
+        # Opt-in tiled decode for memory-constrained GPUs (e.g. 32GB cards where
+        # the untiled Wan VAE decode OOMs long before the DiT does).
+        # NOTE: the feature-cache decode path in AutoencoderKLWan.decode() bypasses
+        # the ParallelTiledVAE tiling dispatch entirely, so it must be disabled.
+        # All cross-rank VAE parallelism is disabled too: parallel_tiled_decode
+        # deadlocks NCCL under SP>1, and decode time is not a benchmark metric —
+        # each rank runs the identical rank-local tiled decode instead.
+        if os.getenv("SGLANG_WAN_VAE_TILING", "0") == "1":
+            self.use_feature_cache = False
+            self.use_tiling = True
+            self.use_temporal_tiling = True
+            self.use_parallel_tiling = False
+            self.use_parallel_decode = False
+            self.use_parallel_encode = False
         self.blend_num_frames = (
             self.tile_sample_min_num_frames - self.tile_sample_stride_num_frames
         ) * 2
