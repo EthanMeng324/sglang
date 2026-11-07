@@ -12,6 +12,7 @@ from sglang.multimodal_gen.runtime.distributed.communication_op import (
     sequence_model_parallel_all_to_all_4D,
 )
 from sglang.multimodal_gen.runtime.distributed.parallel_state import (
+    get_sp_group,
     get_ring_parallel_world_size,
     get_sequence_parallel_world_size,
     get_sp_parallel_rank,
