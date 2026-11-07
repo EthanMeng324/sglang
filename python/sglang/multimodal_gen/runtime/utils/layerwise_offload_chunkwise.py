@@ -62,6 +62,17 @@ def _env_float_or_none(name: str, default: float | None = None) -> float | None:
         return default
 
 
+def _auto_stats_str(tracker) -> str:
+    fn = getattr(tracker, "auto_stats", None)
+    if not callable(fn):
+        return "-"
+    try:
+        st = fn()
+        return f"yield={st.get('yield', 0)}/share={st.get('share', 0)}"
+    except Exception:
+        return "-"
+
+
 def _parse_phase_name_csv(raw: str | None) -> Set[str]:
     if raw is None:
         return set()
@@ -171,6 +182,12 @@ class LayerwiseOffloadManager:
                 window_mode=self.comm_active_window_mode
             )
             self._owns_comm_tracker = True
+
+        if self.comm_tracker is not None:
+            register = getattr(self.comm_tracker, "register_manager", None)
+            if callable(register):
+                register(self)
+        self._h2d_bw_ema = 0.0
 
         self._layer_name_re = re.compile(
             rf"(^|\.){re.escape(layers_attr_str)}\.(\d+)(\.|$)"
@@ -973,7 +990,8 @@ class LayerwiseOffloadManager:
             f"wait_comm_bg_s={wait_bg_s:.3f} wait_comm_sync_s={wait_sync_s:.3f} "
             f"ensure_ready_s={ensure_s:.3f} "
             f"unique_loaded_layers={unique_layers} unique_loaded_mb={unique_mb:.2f} "
-            f"copy_dup_ratio={dup_ratio:.3f}"
+            f"copy_dup_ratio={dup_ratio:.3f} "
+            f"auto={_auto_stats_str(self.comm_tracker)}"
         )
 
     def _schedule_layer_locked(self, layer_idx: int) -> bool:
@@ -1086,6 +1104,36 @@ class LayerwiseOffloadManager:
         self._worker_wakeup_event.set()
         self._worker_thread.join(timeout=1.0)
         self._worker_thread = None
+
+    def h2d_bandwidth_estimate(self) -> float:
+        return float(self._h2d_bw_ema)
+
+    def pending_prefetch_bytes(self) -> int:
+        """Bytes still to be copied for every layer currently scheduled for prefetch."""
+        with self._state_lock:
+            total = 0
+            for layer_idx in self._scheduled_layers:
+                remaining = int(self._layer_total_bytes.get(layer_idx, 0))
+                cpu_phases = self._consolidated_cpu_weights.get(layer_idx, {})
+                for phase_idx, by_dtype in self._prefetch_offsets.get(layer_idx, {}).items():
+                    for dtype, numel in by_dtype.items():
+                        buf = cpu_phases.get(phase_idx, {}).get(dtype)
+                        if buf is not None:
+                            remaining -= int(numel) * buf.element_size()
+                total += max(0, remaining)
+            return total
+
+    @torch.compiler.disable
+    def _note_block_marker(self, kind: str, layer_idx: int) -> None:
+        tracker = self.comm_tracker
+        if tracker is None:
+            return
+        wants = getattr(tracker, "wants_block_markers", None)
+        if not callable(wants) or not wants():
+            return
+        event = torch.cuda.Event()
+        event.record(torch.cuda.current_stream())
+        tracker.note_block_marker(self, layer_idx, kind, event)
 
     def _prefetch_worker_loop(self) -> None:
         if self.device is not None:
@@ -1276,6 +1324,11 @@ class LayerwiseOffloadManager:
                     torch.cuda.nvtx.range_pop()
 
             self._record_copy_stats(background=background, nbytes=nbytes, dur_s=copy_dur_s)
+            if copy_dur_s > 0:
+                inst_bw = nbytes / copy_dur_s
+                self._h2d_bw_ema = (
+                    inst_bw if self._h2d_bw_ema <= 0 else 0.9 * self._h2d_bw_ema + 0.1 * inst_bw
+                )
 
             with self._state_lock:
                 self._prefetch_chunk_events.setdefault(layer_idx, {}).setdefault(
@@ -1962,12 +2015,14 @@ class LayerwiseOffloadManager:
                 self._schedule_prefetch_window(i)
                 self._ensure_phase_ready(i, target_phase_idx=entry_target_phase_idx)
                 self._record_prefetch_cp_wait_end(step_idx, i, wait_start)
+                self._note_block_marker("start", i)
 
             return hook
 
         def make_post_hook(i):
             @torch.compiler.disable
             def hook(module, input, output):
+                self._note_block_marker("end", i)
                 self.release_layer(i)
                 _set_current_offload_layer_label(None)
                 if i == self.num_layers - 1:

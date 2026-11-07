@@ -1,4 +1,5 @@
 import contextlib
+import os
 import queue
 import threading
 import time
@@ -17,6 +18,8 @@ def _normalize_window_mode(mode: str | None) -> str:
         return "none"
     if normalized in {"gpu", "device", "gpu_timed"}:
         return "gpu"
+    if normalized in {"auto", "adaptive", "slack"}:
+        return "auto"
     return "kernel"
 
 
@@ -119,7 +122,14 @@ class CommunicationActivityTracker:
             self._work_thread.start()
         self._gpu_q: queue.Queue | None = None
         self._gpu_thread: threading.Thread | None = None
-        if self._window_mode == "gpu" and torch.cuda.is_available():
+        self._managers: list[Any] = []
+        self._cur_block: tuple[Any, int, float] | None = None
+        self._block_dur: Dict[int, float] = {}
+        self._block_comm: Dict[int, float] = {}
+        self._block_comm_acc = 0.0
+        self._yield_margin = float(os.getenv("SGLANG_DIT_COMM_YIELD_MARGIN", "0.15"))
+        self._auto_stats: Dict[str, int] = {"yield": 0, "share": 0}
+        if self._window_mode in ("gpu", "auto") and torch.cuda.is_available():
             self._gpu_q = queue.Queue()
             if self._event_stop_event is None:
                 self._event_stop_event = threading.Event()
@@ -132,14 +142,31 @@ class CommunicationActivityTracker:
 
     def uses_kernel_window(self) -> bool:
         # Both modes launch the collective with async_op=True and track its Work.
-        return self._window_mode in ("kernel", "gpu")
+        return self._window_mode in ("kernel", "gpu", "auto")
 
     def begin_kernel_region(self, tag: str | None = None) -> _KernelCommRegion | None:
         if not self.uses_kernel_window() or not torch.cuda.is_available():
             return None
         return _KernelCommRegion(
-            self, tag or "comm", gpu_timed=(self._window_mode == "gpu")
+            self, tag or "comm", gpu_timed=(self._window_mode in ("gpu", "auto"))
         )
+
+    def register_manager(self, manager: Any) -> None:
+        if manager not in self._managers:
+            self._managers.append(manager)
+
+    def wants_block_markers(self) -> bool:
+        return self._window_mode == "auto" and self._gpu_q is not None
+
+    def note_block_marker(
+        self, manager: Any, layer_idx: int, kind: str, event: torch.cuda.Event
+    ) -> None:
+        if self._gpu_q is None:
+            return
+        self._gpu_q.put({"kind": kind, "event": event, "manager": manager, "layer": layer_idx})
+
+    def auto_stats(self) -> Dict[str, int]:
+        return dict(self._auto_stats)
 
     def _enqueue_gpu_region(
         self,
@@ -151,15 +178,47 @@ class CommunicationActivityTracker:
     ) -> None:
         if self._gpu_q is None or start_event is None:
             return
-        self._gpu_q.put([False, start_event, nccl_work, end_event, tag])
+        self._gpu_q.put(
+            {"kind": "region", "state": 0, "start": start_event, "work": nccl_work,
+             "end": end_event, "tag": tag, "t0": 0.0}
+        )
+
+    def _should_yield_now(self) -> bool:
+        """auto mode: yield only if the pending prefetch fits in the compute-only
+        time left in the current block (learned from the previous blocks)."""
+        if self._window_mode != "auto":
+            return True
+        cur = self._cur_block
+        if cur is None:
+            return False
+        mgr, _layer, t0 = cur
+        dur = self._block_dur.get(id(mgr))
+        if not dur:
+            return False
+        comm = self._block_comm.get(id(mgr), 0.0)
+        elapsed = time.perf_counter() - t0
+        avail = max(0.0, dur - elapsed) * (1.0 - min(0.9, comm / dur))
+        pending = 0
+        bw = 0.0
+        for m in self._managers:
+            try:
+                pending += int(m.pending_prefetch_bytes())
+                bw = max(bw, float(m.h2d_bandwidth_estimate() or 0.0))
+            except Exception:
+                continue
+        if pending <= 0:
+            return True
+        if bw <= 0:
+            bw = 20e9
+        return pending / bw <= avail * (1.0 - self._yield_margin)
 
     def _gpu_region_loop(self) -> None:
-        """Open each region when its start event completes on the GPU and close it
-        when its NCCL Work (or end event) completes. Regions are polled together so
-        back-to-back collectives keep the window continuous."""
+        """Open each region when its start event completes on the GPU (in auto mode
+        only if the prefetch has slack) and close it when its NCCL Work (or end
+        event) completes; block markers teach the per-block duration and comm time."""
         assert self._gpu_q is not None
         assert self._event_stop_event is not None
-        pending: list[list[Any]] = []
+        pending: list[dict] = []
         while True:
             while True:
                 try:
@@ -168,27 +227,62 @@ class CommunicationActivityTracker:
                     break
                 if item is None:
                     for it in pending:
-                        if it[0]:
+                        if it.get("state") == 1:
                             self._block_launches_end()
                     pending.clear()
                     return
                 pending.append(item)
 
             progressed = False
-            still: list[list[Any]] = []
+            still: list[dict] = []
             for item in pending:
-                started, start_event, work, end_event, _tag = item
-                if not started:
+                kind = item["kind"]
+                if kind != "region":
                     try:
-                        reached = start_event.query()
+                        done = item["event"].query()
+                    except Exception:
+                        done = True
+                    if not done:
+                        still.append(item)
+                        continue
+                    progressed = True
+                    now = time.perf_counter()
+                    mgr = item["manager"]
+                    if kind == "start":
+                        self._cur_block = (mgr, item["layer"], now)
+                        self._block_comm_acc = 0.0
+                    else:
+                        cur = self._cur_block
+                        if cur is not None and cur[0] is mgr:
+                            d = now - cur[2]
+                            key = id(mgr)
+                            prev = self._block_dur.get(key)
+                            self._block_dur[key] = d if prev is None else 0.7 * prev + 0.3 * d
+                            prev_c = self._block_comm.get(key)
+                            self._block_comm[key] = (
+                                self._block_comm_acc if prev_c is None
+                                else 0.7 * prev_c + 0.3 * self._block_comm_acc
+                            )
+                            self._cur_block = None
+                    continue
+                if item["state"] == 0:
+                    try:
+                        reached = item["start"].query()
                     except Exception:
                         reached = True
                     if not reached:
                         still.append(item)
                         continue
-                    self._block_launches_start()
-                    item[0] = True
+                    item["t0"] = time.perf_counter()
+                    if self._should_yield_now():
+                        self._block_launches_start()
+                        item["state"] = 1
+                        self._auto_stats["yield"] += 1
+                    else:
+                        item["state"] = 2
+                        self._auto_stats["share"] += 1
                     progressed = True
+                work, end_event = item["work"], item["end"]
                 try:
                     if work is not None:
                         done = work.is_completed()
@@ -199,7 +293,9 @@ class CommunicationActivityTracker:
                 except Exception:
                     done = True
                 if done:
-                    self._block_launches_end()
+                    if item["state"] == 1:
+                        self._block_launches_end()
+                    self._block_comm_acc += time.perf_counter() - item["t0"]
                     progressed = True
                 else:
                     still.append(item)
