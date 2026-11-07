@@ -188,6 +188,7 @@ class LayerwiseOffloadManager:
             if callable(register):
                 register(self)
         self._h2d_bw_ema = 0.0
+        self._h2d_bw_ema_free = 0.0
 
         self._layer_name_re = re.compile(
             rf"(^|\.){re.escape(layers_attr_str)}\.(\d+)(\.|$)"
@@ -1106,7 +1107,8 @@ class LayerwiseOffloadManager:
         self._worker_thread = None
 
     def h2d_bandwidth_estimate(self) -> float:
-        return float(self._h2d_bw_ema)
+        # Prefer the bandwidth seen while no collective was active (the free link).
+        return float(self._h2d_bw_ema_free or self._h2d_bw_ema)
 
     def pending_prefetch_bytes(self) -> int:
         """Bytes still to be copied for every layer currently scheduled for prefetch."""
@@ -1295,6 +1297,7 @@ class LayerwiseOffloadManager:
 
             if self.comm_tracker is not None and self.comm_tracker.is_active():
                 return False
+            free_link = self.comm_tracker is None or not self.comm_tracker.is_active()
 
             push_nvtx = bool(torch.cuda.is_available() and hasattr(torch.cuda, "nvtx"))
             push_detail_nvtx = False
@@ -1329,6 +1332,11 @@ class LayerwiseOffloadManager:
                 self._h2d_bw_ema = (
                     inst_bw if self._h2d_bw_ema <= 0 else 0.9 * self._h2d_bw_ema + 0.1 * inst_bw
                 )
+                if free_link and (self.comm_tracker is None or not self.comm_tracker.is_active()):
+                    self._h2d_bw_ema_free = (
+                        inst_bw if self._h2d_bw_ema_free <= 0
+                        else 0.9 * self._h2d_bw_ema_free + 0.1 * inst_bw
+                    )
 
             with self._state_lock:
                 self._prefetch_chunk_events.setdefault(layer_idx, {}).setdefault(

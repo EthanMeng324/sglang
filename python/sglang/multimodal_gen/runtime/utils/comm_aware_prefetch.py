@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import os
 import queue
 import threading
@@ -21,6 +22,9 @@ def _normalize_window_mode(mode: str | None) -> str:
     if normalized in {"auto", "adaptive", "slack"}:
         return "auto"
     return "kernel"
+
+
+logger = logging.getLogger(__name__)
 
 
 class _KernelCommRegion:
@@ -127,7 +131,8 @@ class CommunicationActivityTracker:
         self._block_dur: Dict[int, float] = {}
         self._block_comm: Dict[int, float] = {}
         self._block_comm_acc = 0.0
-        self._yield_margin = float(os.getenv("SGLANG_DIT_COMM_YIELD_MARGIN", "0.15"))
+        self._yield_margin = float(os.getenv("SGLANG_DIT_COMM_YIELD_MARGIN", "0.10"))
+        self._auto_debug_left = int(os.getenv("SGLANG_DIT_COMM_AUTO_DEBUG", "60"))
         self._auto_stats: Dict[str, int] = {"yield": 0, "share": 0}
         if self._window_mode in ("gpu", "auto") and torch.cuda.is_available():
             self._gpu_q = queue.Queue()
@@ -197,7 +202,8 @@ class CommunicationActivityTracker:
             return False
         comm = self._block_comm.get(id(mgr), 0.0)
         elapsed = time.perf_counter() - t0
-        avail = max(0.0, dur - elapsed) * (1.0 - min(0.9, comm / dur))
+        remaining_comm = max(0.0, comm - self._block_comm_acc)
+        avail = max(0.0, (dur - elapsed) - remaining_comm)
         pending = 0
         bw = 0.0
         for m in self._managers:
@@ -210,7 +216,17 @@ class CommunicationActivityTracker:
             return True
         if bw <= 0:
             bw = 20e9
-        return pending / bw <= avail * (1.0 - self._yield_margin)
+        decision = pending / bw <= avail * (1.0 - self._yield_margin)
+        if self._auto_debug_left > 0:
+            self._auto_debug_left -= 1
+            logger.info(
+                "[comm-auto] layer=%s elapsed=%.1fms dur=%.1fms comm=%.1fms comm_seen=%.1fms "
+                "avail=%.1fms pending=%.0fMB bw=%.1fGB/s need=%.1fms -> %s",
+                _layer, elapsed * 1e3, dur * 1e3, comm * 1e3, self._block_comm_acc * 1e3,
+                avail * 1e3, pending / 1e6, bw / 1e9, pending / bw * 1e3,
+                "yield" if decision else "share",
+            )
+        return decision
 
     def _gpu_region_loop(self) -> None:
         """Open each region when its start event completes on the GPU (in auto mode
