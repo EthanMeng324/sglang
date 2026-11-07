@@ -13,6 +13,8 @@ def _normalize_window_mode(mode: str | None) -> str:
         return "kernel"
     if normalized in {"launch", "host", "wrapper"}:
         return "launch"
+    if normalized in {"none", "off", "noyield"}:
+        return "none"
     return "kernel"
 
 
@@ -96,6 +98,8 @@ class CommunicationActivityTracker:
         return _KernelCommRegion(self, tag or "comm")
 
     def _block_launches_start(self) -> None:
+        if self._window_mode == "none":
+            return
         with self._cv:
             self._active += 1
             self._cv.notify_all()
@@ -219,11 +223,15 @@ class CommunicationActivityTracker:
             pending.append(item)
 
     def mark_start(self, _tag: str | None = None) -> None:
+        if self._window_mode == "none":
+            return
         with self._cv:
             self._active += 1
             self._cv.notify_all()
 
     def mark_end(self, _tag: str | None = None) -> None:
+        if self._window_mode == "none":
+            return
         with self._cv:
             if self._active > 0:
                 self._active -= 1

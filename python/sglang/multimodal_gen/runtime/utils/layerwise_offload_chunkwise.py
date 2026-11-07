@@ -96,6 +96,7 @@ class LayerwiseOffloadManager:
         comm_aware: bool = False,
         comm_patch_torch_distributed: bool = False,
         comm_active_window_mode: str = "kernel",
+        comm_tracker: CommunicationActivityTracker | None = None,
         prefetch_chunk_size_mb: int = 32,
         phase_specs: Sequence[PhaseSpec] | None = None,
         phase_prefetch_depth: int = 4,
@@ -159,11 +160,17 @@ class LayerwiseOffloadManager:
 
         self.device = torch.device("cuda", torch.cuda.current_device())
         self.copy_stream = torch.cuda.Stream()
-        self.comm_tracker = (
-            CommunicationActivityTracker(window_mode=self.comm_active_window_mode)
-            if self.comm_aware
-            else None
-        )
+        self._owns_comm_tracker = False
+        if not self.comm_aware:
+            self.comm_tracker = None
+        elif comm_tracker is not None:
+            # One tracker per model, shared by every offloaded ModuleList.
+            self.comm_tracker = comm_tracker
+        else:
+            self.comm_tracker = CommunicationActivityTracker(
+                window_mode=self.comm_active_window_mode
+            )
+            self._owns_comm_tracker = True
 
         self._layer_name_re = re.compile(
             rf"(^|\.){re.escape(layers_attr_str)}\.(\d+)(\.|$)"
@@ -1982,7 +1989,7 @@ class LayerwiseOffloadManager:
         for hook_handle in self._forward_hooks:
             hook_handle.remove()
         self._forward_hooks.clear()
-        if self.comm_tracker is not None:
+        if self.comm_tracker is not None and self._owns_comm_tracker:
             self.comm_tracker.unpatch_torch_distributed()
             self.comm_tracker.close()
 
@@ -2076,6 +2083,11 @@ class OffloadableDiTMixin:
                 "the runtime will still ensure the whole layer is ready before compute."
             )
 
+        shared_comm_tracker = (
+            CommunicationActivityTracker(window_mode=comm_active_window_mode)
+            if comm_aware and torch.cuda.is_available()
+            else None
+        )
         for layer_name in self.layer_names:
             module_list = getattr(self, layer_name, None)
             if module_list is None or not isinstance(module_list, torch.nn.ModuleList):
@@ -2102,6 +2114,7 @@ class OffloadableDiTMixin:
                 comm_aware=comm_aware,
                 comm_patch_torch_distributed=comm_patch_dist,
                 comm_active_window_mode=comm_active_window_mode,
+                comm_tracker=shared_comm_tracker,
                 prefetch_chunk_size_mb=prefetch_chunk_size_mb,
                 phase_specs=phase_specs,
                 phase_prefetch_depth=phase_prefetch_depth,
