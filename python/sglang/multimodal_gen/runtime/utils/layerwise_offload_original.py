@@ -3,11 +3,19 @@ import re
 from itertools import chain
 from typing import Any, Dict, List, Set, Tuple
 
+import os
+
 import torch
 
 from sglang.multimodal_gen.runtime.managers.forward_context import get_forward_context
 from sglang.multimodal_gen.runtime.server_args import ServerArgs
 from sglang.multimodal_gen.runtime.utils.logging_utils import init_logger
+
+# SGLANG_DIT_OFFLOAD_COMM_QUIESCE=0 disables the wait-for-copy-stream before every
+# collective, which upstream SGLang does not have ("stock" whole-layer offload).
+_COMM_QUIESCE_ENABLED = os.getenv("SGLANG_DIT_OFFLOAD_COMM_QUIESCE", "1").strip().lower() in {
+    "1", "true", "yes", "on"
+}
 
 logger = init_logger(__name__)
 
@@ -456,7 +464,7 @@ class LayerwiseOffloadManager:
 
     @torch.compiler.disable
     def quiesce_copy_stream_for_comm(self, after_drain=None) -> None:
-        if not self.enabled or self.copy_stream is None:
+        if not self.enabled or self.copy_stream is None or not _COMM_QUIESCE_ENABLED:
             if after_drain is not None:
                 after_drain()
             return
