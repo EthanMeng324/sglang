@@ -134,6 +134,10 @@ class CommunicationActivityTracker:
         self._yield_margin = float(os.getenv("SGLANG_DIT_COMM_YIELD_MARGIN", "0.10"))
         self._auto_debug_left = int(os.getenv("SGLANG_DIT_COMM_AUTO_DEBUG", "60"))
         self._auto_stats: Dict[str, int] = {"yield": 0, "share": 0}
+        self._mode_yield = False
+        self._step_t0: float | None = None
+        self._step_comm = 0.0
+        self._auto_steps = 0
         if self._window_mode in ("gpu", "auto") and torch.cuda.is_available():
             self._gpu_q = queue.Queue()
             if self._event_stop_event is None:
@@ -189,44 +193,46 @@ class CommunicationActivityTracker:
         )
 
     def _should_yield_now(self) -> bool:
-        """auto mode: yield only if the pending prefetch fits in the compute-only
-        time left in the current block (learned from the previous blocks)."""
+        """auto mode: the per-forward mode set by _close_step (identical on all ranks)."""
         if self._window_mode != "auto":
             return True
-        cur = self._cur_block
-        if cur is None:
-            return False
-        mgr, _layer, t0 = cur
-        dur = self._block_dur.get(id(mgr))
-        if not dur:
-            return False
-        comm = self._block_comm.get(id(mgr), 0.0)
-        elapsed = time.perf_counter() - t0
-        remaining_comm = max(0.0, comm - self._block_comm_acc)
-        avail = max(0.0, (dur - elapsed) - remaining_comm)
-        pending = 0
+        return self._mode_yield
+
+    def _close_step(self, now: float) -> None:
+        """Called at the GPU start of layer 0 (first manager): close the previous forward,
+        apply the online F* test and set the yield/share mode for the next forward."""
+        t0 = self._step_t0
+        comm = self._step_comm
+        self._step_t0 = now
+        self._step_comm = 0.0
+        if t0 is None:
+            return
+        dur = now - t0
+        nbytes = 0
         bw = 0.0
         for m in self._managers:
             try:
-                pending += int(m.pending_prefetch_bytes())
+                nbytes += int(m.step_prefetch_bytes())
                 bw = max(bw, float(m.h2d_bandwidth_estimate() or 0.0))
             except Exception:
                 continue
-        if pending <= 0:
-            return True
         if bw <= 0:
             bw = 20e9
-        decision = pending / bw <= avail * (1.0 - self._yield_margin)
-        if self._auto_debug_left > 0:
-            self._auto_debug_left -= 1
-            logger.info(
-                "[comm-auto] layer=%s elapsed=%.1fms dur=%.1fms comm=%.1fms comm_seen=%.1fms "
-                "avail=%.1fms pending=%.0fMB bw=%.1fGB/s need=%.1fms -> %s",
-                _layer, elapsed * 1e3, dur * 1e3, comm * 1e3, self._block_comm_acc * 1e3,
-                avail * 1e3, pending / 1e6, bw / 1e9, pending / bw * 1e3,
-                "yield" if decision else "share",
-            )
-        return decision
+        need = nbytes / bw
+        compute_only = max(0.0, dur - comm)
+        ratio = need / compute_only if compute_only > 0 else float("inf")
+        hi = 1.0 - self._yield_margin
+        if self._mode_yield and ratio > hi + 0.05:
+            self._mode_yield = False
+        elif not self._mode_yield and ratio <= hi:
+            self._mode_yield = True
+        self._auto_steps += 1
+        logger.info(
+            "[comm-auto] forward %d: dur=%.0fms comm=%.0fms compute_only=%.0fms prefetch=%.0fMB "
+            "bw=%.1fGB/s need=%.0fms ratio=%.2f -> %s",
+            self._auto_steps, dur * 1e3, comm * 1e3, compute_only * 1e3, nbytes / 1e6,
+            bw / 1e9, need * 1e3, ratio, "yield" if self._mode_yield else "share",
+        )
 
     def _gpu_region_loop(self) -> None:
         """Open each region when its start event completes on the GPU (in auto mode
@@ -265,6 +271,8 @@ class CommunicationActivityTracker:
                     now = time.perf_counter()
                     mgr = item["manager"]
                     if kind == "start":
+                        if item["layer"] == 0 and self._managers and mgr is self._managers[0]:
+                            self._close_step(now)
                         self._cur_block = (mgr, item["layer"], now)
                         self._block_comm_acc = 0.0
                     else:
@@ -311,7 +319,9 @@ class CommunicationActivityTracker:
                 if done:
                     if item["state"] == 1:
                         self._block_launches_end()
-                    self._block_comm_acc += time.perf_counter() - item["t0"]
+                    region_dur = time.perf_counter() - item["t0"]
+                    self._block_comm_acc += region_dur
+                    self._step_comm += region_dur
                     progressed = True
                 else:
                     still.append(item)

@@ -1110,6 +1110,10 @@ class LayerwiseOffloadManager:
         # Prefer the bandwidth seen while no collective was active (the free link).
         return float(self._h2d_bw_ema_free or self._h2d_bw_ema)
 
+    def step_prefetch_bytes(self) -> int:
+        """Bytes prefetched per forward: every layer except layer 0, which stays resident."""
+        return int(sum(b for l, b in self._layer_total_bytes.items() if l != 0))
+
     def pending_prefetch_bytes(self) -> int:
         """Bytes still to be copied for every layer currently scheduled for prefetch."""
         with self._state_lock:
