@@ -134,7 +134,12 @@ class CommunicationActivityTracker:
         self._yield_margin = float(os.getenv("SGLANG_DIT_COMM_YIELD_MARGIN", "0.10"))
         self._auto_debug_left = int(os.getenv("SGLANG_DIT_COMM_AUTO_DEBUG", "60"))
         self._auto_stats: Dict[str, int] = {"yield": 0, "share": 0}
-        self._mode_yield = False
+        self._phase = "warm"
+        self._dur_share: float | None = None
+        self._dur_yield: float | None = None
+        self._next_check = 0
+        self._period = 16
+        self._yield_tolerance = float(os.getenv("SGLANG_DIT_COMM_YIELD_TOLERANCE", "0.01"))
         self._step_t0: float | None = None
         self._step_comm = 0.0
         self._auto_steps = 0
@@ -193,14 +198,16 @@ class CommunicationActivityTracker:
         )
 
     def _should_yield_now(self) -> bool:
-        """auto mode: the per-forward mode set by _close_step (identical on all ranks)."""
+        """auto mode: yield in the trial/yield phases chosen by _close_step."""
         if self._window_mode != "auto":
             return True
-        return self._mode_yield
+        return self._phase in ("trial", "yield")
 
     def _close_step(self, now: float) -> None:
-        """Called at the GPU start of layer 0 (first manager): close the previous forward,
-        apply the online F* test and set the yield/share mode for the next forward."""
+        """Called at the GPU start of layer 0 (first manager): close the previous forward
+        and pick the mode for the next one. warm -> share (measure, online F* test) ->
+        yield trial (one forward) -> keep the faster mode; re-check every `_period`
+        forwards (period doubles after a failed trial)."""
         t0 = self._step_t0
         comm = self._step_comm
         self._step_t0 = now
@@ -208,6 +215,13 @@ class CommunicationActivityTracker:
         if t0 is None:
             return
         dur = now - t0
+        self._auto_steps += 1
+        k = self._auto_steps
+        phase = self._phase
+        if k <= 2:
+            self._phase = "share"
+            self._auto_log(k, phase, dur, comm, None, None, "warm-up")
+            return
         nbytes = 0
         bw = 0.0
         for m in self._managers:
@@ -221,17 +235,41 @@ class CommunicationActivityTracker:
         need = nbytes / bw
         compute_only = max(0.0, dur - comm)
         ratio = need / compute_only if compute_only > 0 else float("inf")
-        hi = 1.0 - self._yield_margin
-        if self._mode_yield and ratio > hi + 0.05:
-            self._mode_yield = False
-        elif not self._mode_yield and ratio <= hi:
-            self._mode_yield = True
-        self._auto_steps += 1
+        note = ""
+        if phase == "share":
+            self._dur_share = dur
+            if k >= self._next_check:
+                if ratio <= 1.0 - self._yield_margin:
+                    self._phase = "trial"
+                    note = "F* test passed -> yield trial"
+                else:
+                    self._next_check = k + self._period
+                    note = "F* test failed -> stay share"
+        elif phase == "trial":
+            self._dur_yield = dur
+            if self._dur_share is not None and dur <= self._dur_share * (1.0 - self._yield_tolerance):
+                self._phase = "yield"
+                self._period = 16
+                self._next_check = k + self._period
+                note = f"yield {dur*1e3:.0f}ms < share {self._dur_share*1e3:.0f}ms -> keep yield"
+            else:
+                self._phase = "share"
+                self._period = min(self._period * 2, 256)
+                self._next_check = k + self._period
+                note = f"yield {dur*1e3:.0f}ms >= share {(self._dur_share or 0)*1e3:.0f}ms -> back to share"
+        elif phase == "yield":
+            self._dur_yield = dur
+            if k >= self._next_check:
+                self._phase = "share"
+                note = "periodic re-check -> one share forward"
+        self._auto_log(k, phase, dur, comm, ratio, need, note)
+
+    def _auto_log(self, k, phase, dur, comm, ratio, need, note) -> None:
         logger.info(
-            "[comm-auto] forward %d: dur=%.0fms comm=%.0fms compute_only=%.0fms prefetch=%.0fMB "
-            "bw=%.1fGB/s need=%.0fms ratio=%.2f -> %s",
-            self._auto_steps, dur * 1e3, comm * 1e3, compute_only * 1e3, nbytes / 1e6,
-            bw / 1e9, need * 1e3, ratio, "yield" if self._mode_yield else "share",
+            "[comm-auto] forward %d (%s): dur=%.0fms comm=%.0fms compute_only=%.0fms need=%s ratio=%s -> next=%s %s",
+            k, phase, dur * 1e3, comm * 1e3, max(0.0, dur - comm) * 1e3,
+            "-" if need is None else f"{need*1e3:.0f}ms", "-" if ratio is None else f"{ratio:.2f}",
+            self._phase, note,
         )
 
     def _gpu_region_loop(self) -> None:
