@@ -21,7 +21,8 @@ echo "== sb_mn: $RUN arms=$arms nodes=$(scontrol show hostnames "$SLURM_JOB_NODE
 srun -N "$NNODES" --ntasks-per-node=1 bash -c 'echo "$(hostname): $(nvidia-smi --query-gpu=name,pci.bus_id --format=csv,noheader | tr "\n" ";") ib: $(ls /sys/class/infiniband 2>/dev/null | tr "\n" " ")"' | tee "$OUT/logs/nodes.txt"
 # cross-node NCCL bandwidth sanity (all_to_all / send-recv per rank), informational
 if [[ "${NCCLBW:-1}" == 1 ]]; then
-    srun -N "$NNODES" --ntasks-per-node=1 --wait=60 bash -c "source $WS/sglang/.venv/bin/activate && torchrun --nnodes $NNODES --node_rank \$SLURM_NODEID --master_addr $MASTER_ADDR --master_port 29399 --nproc_per_node $GPUS_PER_NODE $WS/nccl_bw.py" 2>&1 | grep -E "===|GB/s" | tee "$OUT/logs/nccl_bw.txt"
+    srun -N "$NNODES" --ntasks-per-node=1 --wait=60 bash -c "source $WS/sglang/.venv/bin/activate && NCCL_DEBUG=INFO NCCL_DEBUG_SUBSYS=INIT,NET torchrun --nnodes $NNODES --node_rank \$SLURM_NODEID --master_addr $MASTER_ADDR --master_port 29399 --nproc_per_node $GPUS_PER_NODE $WS/nccl_bw.py" > "$OUT/logs/nccl_bw_raw.txt" 2>&1
+    grep -E "===|GB/s|via NET|NET/|Error|error" "$OUT/logs/nccl_bw_raw.txt" | sed -E 's/.*NCCL INFO //' | sort | uniq -c | sort -rn | head -40 | tee "$OUT/logs/nccl_bw.txt"
 fi
 off=0
 IFS=',' read -r -a LIST <<<"$arms"
