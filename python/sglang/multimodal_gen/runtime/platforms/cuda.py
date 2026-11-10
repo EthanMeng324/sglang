@@ -130,7 +130,9 @@ class CudaPlatformBase(Platform):
             torch.cuda.empty_cache()
 
         if torch.distributed.is_initialized():
-            device_id = torch.distributed.get_rank()
+            # the CUDA device index is the LOCAL device (multi-node: global ranks beyond
+            # gpus_per_node live on other nodes); the worker made its device current
+            device_id = torch.cuda.current_device()
 
         device_props = torch.cuda.get_device_properties(device_id)
         if device_props.is_integrated:
