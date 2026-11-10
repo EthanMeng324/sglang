@@ -57,6 +57,7 @@ class Scheduler:
         port_args: PortArgs,
         task_pipes_to_slaves: list = None,
         result_pipes_from_slaves: list = None,
+        local_rank: int | None = None,
     ):
         self.server_args = server_args
         self.port_args = port_args
@@ -76,7 +77,7 @@ class Scheduler:
             self.receiver = None
 
         worker = GPUWorker(
-            local_rank=gpu_id,
+            local_rank=gpu_id if local_rank is None else local_rank,
             master_port=port_args.master_port,
             rank=gpu_id,
             server_args=server_args,

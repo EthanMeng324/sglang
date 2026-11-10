@@ -93,7 +93,8 @@ class GPUWorker:
         """Initialize the device and load the model."""
         torch.get_device_module().set_device(self.local_rank)
         # Set environment variables for distributed initialization
-        os.environ["MASTER_ADDR"] = "localhost"
+        master_addr = getattr(self.server_args, "dist_master_addr", "127.0.0.1")
+        os.environ["MASTER_ADDR"] = master_addr
         os.environ["MASTER_PORT"] = str(self.master_port)
         os.environ["LOCAL_RANK"] = str(self.local_rank)
         os.environ["RANK"] = str(self.rank)
@@ -106,7 +107,7 @@ class GPUWorker:
             ring_degree=self.server_args.ring_degree,
             sp_size=self.server_args.sp_degree,
             dp_size=self.server_args.dp_size,
-            distributed_init_method=f"tcp://127.0.0.1:{self.master_port}",
+            distributed_init_method=f"tcp://{master_addr}:{self.master_port}",
             dist_timeout=self.server_args.dist_timeout,
         )
 
@@ -576,6 +577,7 @@ def run_scheduler_process(
             port_args=port_args,
             task_pipes_to_slaves=task_pipes_to_slaves,
             result_pipes_from_slaves=result_pipes_from_slaves,
+            local_rank=local_rank,
         )
         logger.info(f"Worker {rank}: Scheduler loop started.")
         pipe_writer.send(

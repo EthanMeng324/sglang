@@ -257,6 +257,12 @@ class ServerArgs:
 
     # Parallelism
     num_gpus: int = 1
+    # Multi-node: num_gpus is the total world size; this node launches num_gpus // nnodes
+    # workers with global ranks node_rank * gpus_per_node + i. dist_init_addr is host:port of
+    # the rank-0 node (torch.distributed TCP init); node 0 also hosts the scheduler and client.
+    nnodes: int = 1
+    node_rank: int = 0
+    dist_init_addr: str | None = None
     tp_size: Optional[int] = None
     sp_degree: Optional[int] = None
     # sequence parallelism
@@ -494,6 +500,22 @@ class ServerArgs:
             random.randint(0, 100) if self.scheduler_port == 5555 else 0
         )
         self.scheduler_port = self.settle_port(initial_scheduler_port)
+        if self.nnodes > 1 or self.dist_init_addr:
+            if not self.dist_init_addr:
+                raise ValueError("--dist-init-addr host:port is required when --nnodes > 1")
+            host, _, port = self.dist_init_addr.rpartition(":")
+            if not host or not port.isdigit():
+                raise ValueError(
+                    f"--dist-init-addr must be host:port, got {self.dist_init_addr!r}"
+                )
+            if self.num_gpus % max(1, self.nnodes) != 0 or not (0 <= self.node_rank < self.nnodes):
+                raise ValueError(
+                    f"num_gpus ({self.num_gpus}) must be divisible by nnodes ({self.nnodes}) "
+                    f"and 0 <= node_rank ({self.node_rank}) < nnodes"
+                )
+            # every node must use the rank-0 node's port verbatim
+            self.master_port = int(port)
+            return
         initial_master_port = (
             self.master_port
             if self.master_port is not None
@@ -875,6 +897,24 @@ class ServerArgs:
             help="Master port for distributed inference. If not set, a random free port will be used.",
         )
         parser.add_argument(
+            "--nnodes",
+            type=int,
+            default=ServerArgs.nnodes,
+            help="Number of nodes; --num-gpus is the total GPU count across nodes.",
+        )
+        parser.add_argument(
+            "--node-rank",
+            type=int,
+            default=ServerArgs.node_rank,
+            help="Rank of this node (node 0 hosts the scheduler, the client and the HTTP server).",
+        )
+        parser.add_argument(
+            "--dist-init-addr",
+            type=str,
+            default=ServerArgs.dist_init_addr,
+            help="host:port of the rank-0 node for torch.distributed TCP initialisation (multi-node).",
+        )
+        parser.add_argument(
             "--scheduler-port",
             type=int,
             default=ServerArgs.scheduler_port,
@@ -956,6 +996,16 @@ class ServerArgs:
             return f"http://[{self.host}]:{self.port}"
         else:
             return f"http://{self.host}:{self.port}"
+
+    @property
+    def gpus_per_node(self) -> int:
+        return max(1, self.num_gpus // max(1, self.nnodes))
+
+    @property
+    def dist_master_addr(self) -> str:
+        if self.dist_init_addr:
+            return self.dist_init_addr.rpartition(":")[0]
+        return "127.0.0.1"
 
     @property
     def scheduler_endpoint(self):

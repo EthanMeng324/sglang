@@ -68,13 +68,19 @@ def launch_server(server_args: ServerArgs, launch_http_server: bool = True):
     # Start a new server with multiple worker processes
     logger.info("Starting server...")
 
-    num_gpus = server_args.num_gpus
+    # Multi-node: this node launches num_gpus // nnodes workers with global ranks
+    # node_rank * gpus_per_node + i; the master (rank 0) lives on node 0 only.
+    num_gpus = server_args.gpus_per_node
+    rank_base = server_args.node_rank * num_gpus
+    # on a worker-only node every local process is a slave
+    n_slave_pipes = num_gpus if rank_base > 0 else num_gpus - 1
+    slave_off = 0 if rank_base > 0 else 1
     processes = []
 
     # Pipes for master to talk to slaves
     task_pipes_to_slaves_w = []
     task_pipes_to_slaves_r = []
-    for _ in range(num_gpus - 1):
+    for _ in range(n_slave_pipes):
         r, w = mp.Pipe(duplex=False)
         task_pipes_to_slaves_r.append(r)
         task_pipes_to_slaves_w.append(w)
@@ -82,7 +88,7 @@ def launch_server(server_args: ServerArgs, launch_http_server: bool = True):
     # Pipes for slaves to talk to master
     result_pipes_from_slaves_w = []
     result_pipes_from_slaves_r = []
-    for _ in range(num_gpus - 1):
+    for _ in range(n_slave_pipes):
         r, w = mp.Pipe(duplex=False)
         result_pipes_from_slaves_r.append(r)
         result_pipes_from_slaves_w.append(w)
@@ -95,12 +101,12 @@ def launch_server(server_args: ServerArgs, launch_http_server: bool = True):
     for i in range(num_gpus):
         reader, writer = mp.Pipe(duplex=False)
         scheduler_pipe_writers.append(writer)
-        if i == 0:  # Master worker
+        if rank_base + i == 0:  # Master worker
             process = mp.Process(
                 target=run_scheduler_process,
                 args=(
                     i,  # local_rank
-                    i,  # rank
+                    rank_base + i,  # rank
                     master_port,
                     server_args,
                     writer,
@@ -117,14 +123,14 @@ def launch_server(server_args: ServerArgs, launch_http_server: bool = True):
                 target=run_scheduler_process,
                 args=(
                     i,  # local_rank
-                    i,  # rank
+                    rank_base + i,  # rank
                     master_port,
                     server_args,
                     writer,
                     None,  # No task pipe to read from master
                     None,  # No result pipe to write to master
-                    task_pipes_to_slaves_r[i - 1],
-                    result_pipes_from_slaves_w[i - 1],
+                    task_pipes_to_slaves_r[i - slave_off],
+                    result_pipes_from_slaves_w[i - slave_off],
                 ),
                 name=f"sglang-diffusionWorker-{i}",
                 daemon=True,
@@ -167,6 +173,17 @@ def launch_server(server_args: ServerArgs, launch_http_server: bool = True):
         reader.close()
 
     logger.debug("All workers are ready")
+
+    if rank_base > 0:
+        # worker-only node: no scheduler endpoint or HTTP server here; the workers exit
+        # when the rank-0 node broadcasts the shutdown request
+        logger.info(
+            "Node %d: %d workers up (global ranks %d-%d); waiting for the rank-0 node.",
+            server_args.node_rank, num_gpus, rank_base, rank_base + num_gpus - 1,
+        )
+        for p in processes:
+            p.join()
+        return processes
 
     if launch_http_server:
         logger.info("Starting FastAPI server.")

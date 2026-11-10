@@ -114,6 +114,14 @@ def generate_cmd(args: argparse.Namespace):
 
     server_args = ServerArgs.from_cli_args(args)
 
+    if getattr(server_args, "node_rank", 0) > 0:
+        # worker-only node of a multi-node run: launch the local workers and wait for the
+        # rank-0 node (which receives the request and broadcasts it to every rank)
+        from sglang.multimodal_gen.runtime.launch_server import launch_server
+
+        launch_server(server_args, launch_http_server=False)
+        return
+
     sampling_params_kwargs = SamplingParams.get_cli_args(args)
     sampling_params_kwargs["request_id"] = generate_request_id()
 
