@@ -133,6 +133,9 @@ class LayerwiseOffloadManager:
         self._stream_gate = None
         self._gate_inflight: deque = deque()
         self._gate_inflight_cap = max(1, _env_int("SGLANG_DIT_GATE_INFLIGHT_CHUNKS", 64))
+        # fixed-cadence issue (rebuttal baseline): average chunk issue rate in GB/s, 0 = off
+        self._pace_gbps = float(os.getenv("SGLANG_DIT_PREFETCH_PACE_GBPS", "0") or 0)
+        self._pace_next_t = 0.0
         self.submodule_granularity = submodule_granularity
         self._coarse_phase_specs: Tuple[PhaseSpec, ...] = tuple(
             phase_specs or (PhaseSpec(name="layer", prefixes=("",)),)
@@ -1170,7 +1173,16 @@ class LayerwiseOffloadManager:
             ):
                 continue
 
+            if self._pace_gbps > 0:
+                now = time.perf_counter()
+                if now < self._pace_next_t:
+                    time.sleep(self._pace_next_t - now)
+                    now = time.perf_counter()
             copied = self._copy_one_chunk(layer_idx, phase_idx, background=True)
+            if copied and self._pace_gbps > 0:
+                self._pace_next_t = max(now, self._pace_next_t) + (
+                    self.prefetch_chunk_size_bytes / (self._pace_gbps * 1e9)
+                )
             if not copied:
                 time.sleep(0.0005)
 
