@@ -74,7 +74,7 @@ run_one() {
         no)     env_vars+=(SGLANG_DIT_COMM_AWARE_OFFLOAD=0); flags+=(--dit-layerwise-offload false) ;;
         old)    env_vars+=(SGLANG_DIT_COMM_AWARE_OFFLOAD=0 SGLANG_DIT_OFFLOAD_COMM_QUIESCE=1); flags+=("${offload[@]}") ;;
         stock)  env_vars+=(SGLANG_DIT_COMM_AWARE_OFFLOAD=0 SGLANG_DIT_OFFLOAD_COMM_QUIESCE=0); flags+=("${offload[@]}") ;;
-        launch|kernel|none|gpu|auto)
+        launch|kernel|none|gpu|auto|gate)
                 env_vars+=("${cf[@]}" SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE="$arm" SGLANG_DIT_OFFLOAD_RESIDENT_RATIO=)
                 flags+=("${offload[@]}") ;;
         ratio)  env_vars+=("${cf[@]}" SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE="$RATIO_WINDOW" SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="$RESIDENT_RATIO")

@@ -1,4 +1,5 @@
 import contextlib
+import ctypes
 import logging
 import os
 import queue
@@ -21,10 +22,111 @@ def _normalize_window_mode(mode: str | None) -> str:
         return "gpu"
     if normalized in {"auto", "adaptive", "slack"}:
         return "auto"
+    if normalized in {"gate", "memops", "stream_gate"}:
+        return "gate"
     return "kernel"
 
 
 logger = logging.getLogger(__name__)
+
+
+def _find_libcuda() -> str:
+    try:
+        with open("/proc/self/maps") as f:
+            for ln in f:
+                if "libcuda.so" in ln:
+                    return ln.split()[-1]
+    except Exception:
+        pass
+    return "libcuda.so.1"
+
+
+class _StreamGate:
+    """GPU-side prefetch gate on CUDA stream memory operations.
+
+    The compute stream writes a device flag to 1 right before each collective and
+    back to 0 right after it (stream-ordered: the writes land when the GPU reaches
+    those points). The copy stream waits for flag == 0 before every chunk, so a
+    chunk already in flight when the flag flips is the only traffic that overlaps
+    the collective. No host thread is involved in opening or closing the window.
+    """
+
+    CU_STREAM_WAIT_VALUE_EQ = 0x1
+
+    def __init__(self, device: torch.device) -> None:
+        self.device_index = (
+            device.index if device.index is not None else torch.cuda.current_device()
+        )
+        lib = ctypes.CDLL(_find_libcuda())
+        u32 = [ctypes.c_void_p, ctypes.c_uint64, ctypes.c_uint32, ctypes.c_uint]
+        self._write = self._fn(lib, ("cuStreamWriteValue32_v2", "cuStreamWriteValue32"), u32)
+        self._wait = self._fn(lib, ("cuStreamWaitValue32_v2", "cuStreamWaitValue32"), u32)
+        self._ctx_get = self._fn(lib, ("cuCtxGetCurrent",), [ctypes.POINTER(ctypes.c_void_p)])
+        self._ctx_set = self._fn(lib, ("cuCtxSetCurrent",), [ctypes.c_void_p])
+        self._primary_retain = self._fn(
+            lib, ("cuDevicePrimaryCtxRetain",), [ctypes.POINTER(ctypes.c_void_p), ctypes.c_int]
+        )
+        self._lib = lib
+        self._primary_ctx: int | None = None
+        # the flag lives in a small device tensor kept alive by this object
+        self._flag = torch.zeros(
+            64, dtype=torch.int32, device=torch.device("cuda", self.device_index)
+        )
+        self.ptr = int(self._flag.data_ptr())
+        self.n_writes = 0
+        self.n_waits = 0
+        self._ensure_ctx()
+        rc = self._write(
+            ctypes.c_void_p(torch.cuda.current_stream(self.device_index).cuda_stream),
+            ctypes.c_uint64(self.ptr), ctypes.c_uint32(0), ctypes.c_uint(0),
+        )
+        if rc != 0:
+            raise RuntimeError(f"cuStreamWriteValue32 probe failed (rc={rc})")
+
+    @staticmethod
+    def _fn(lib, names, argtypes):
+        for n in names:
+            f = getattr(lib, n, None)
+            if f is not None:
+                f.restype = ctypes.c_int
+                f.argtypes = argtypes
+                return f
+        raise RuntimeError(f"none of {names} found in libcuda")
+
+    def _ensure_ctx(self) -> None:
+        # the driver API needs a current context in the calling thread; torch's
+        # primary context may not be current yet in a freshly started worker thread
+        ctx = ctypes.c_void_p(0)
+        self._ctx_get(ctypes.byref(ctx))
+        if ctx.value:
+            return
+        if self._primary_ctx is None:
+            p = ctypes.c_void_p(0)
+            rc = self._primary_retain(ctypes.byref(p), ctypes.c_int(self.device_index))
+            if rc != 0:
+                raise RuntimeError(f"cuDevicePrimaryCtxRetain rc={rc}")
+            self._primary_ctx = p.value
+        self._ctx_set(ctypes.c_void_p(self._primary_ctx))
+
+    def write(self, stream: torch.cuda.Stream, value: int) -> None:
+        self._ensure_ctx()
+        rc = self._write(
+            ctypes.c_void_p(stream.cuda_stream), ctypes.c_uint64(self.ptr),
+            ctypes.c_uint32(value), ctypes.c_uint(0),
+        )
+        if rc != 0:
+            raise RuntimeError(f"cuStreamWriteValue32 rc={rc}")
+        self.n_writes += 1
+
+    def wait_zero(self, stream: torch.cuda.Stream) -> None:
+        self._ensure_ctx()
+        rc = self._wait(
+            ctypes.c_void_p(stream.cuda_stream), ctypes.c_uint64(self.ptr),
+            ctypes.c_uint32(0), ctypes.c_uint(self.CU_STREAM_WAIT_VALUE_EQ),
+        )
+        if rc != 0:
+            raise RuntimeError(f"cuStreamWaitValue32 rc={rc}")
+        self.n_waits += 1
 
 
 class _KernelCommRegion:
@@ -33,6 +135,7 @@ class _KernelCommRegion:
         tracker: "CommunicationActivityTracker",
         tag: str,
         gpu_timed: bool = False,
+        gate: Any = None,
     ):
         self._tracker = tracker
         self._tag = tag
@@ -42,9 +145,16 @@ class _KernelCommRegion:
         self._nccl_work: Any = None
         self._gpu_timed = gpu_timed
         self._start_event: torch.cuda.Event | None = None
+        self._gate = gate
 
     def record_start(self) -> None:
         if self._active_started:
+            return
+        if self._gate is not None:
+            # Stream-ordered gate: flag=1 lands when the compute stream reaches the
+            # collective; the copy stream stops issuing chunks from that point.
+            self._gate.write(torch.cuda.current_stream(), 1)
+            self._active_started = True
             return
         if self._gpu_timed:
             # GPU-timed window: the region becomes active only when the compute
@@ -68,6 +178,11 @@ class _KernelCommRegion:
             return
         self._finalized = True
         if not self._active_started:
+            return
+        if self._gate is not None:
+            # The current stream already waits on the collective's Work, so this
+            # write lands right after the collective completes on the GPU.
+            self._gate.write(torch.cuda.current_stream(), 0)
             return
         if self._gpu_timed:
             end_event = None
@@ -127,6 +242,8 @@ class CommunicationActivityTracker:
         self._gpu_q: queue.Queue | None = None
         self._gpu_thread: threading.Thread | None = None
         self._managers: list[Any] = []
+        self._gate: _StreamGate | None = None
+        self._gate_failed = False
         self._cur_block: tuple[Any, int, float] | None = None
         self._block_dur: Dict[int, float] = {}
         self._block_comm: Dict[int, float] = {}
@@ -154,13 +271,49 @@ class CommunicationActivityTracker:
             )
             self._gpu_thread.start()
 
+    @property
+    def window_mode(self) -> str:
+        return self._window_mode
+
+    def stream_gate(self, device: torch.device | None = None):
+        """The GPU-side gate (window mode "gate"), created on first use; None otherwise."""
+        if self._window_mode != "gate":
+            return None
+        with self._lock:
+            if self._gate is None and not self._gate_failed:
+                try:
+                    dev = device if device is not None else torch.device(
+                        "cuda", torch.cuda.current_device()
+                    )
+                    self._gate = _StreamGate(dev)
+                    logger.info(
+                        "[comm-gate] stream memops gate ready on %s (flag at 0x%x)",
+                        dev, self._gate.ptr,
+                    )
+                except Exception as ex:
+                    self._gate_failed = True
+                    logger.warning(
+                        "[comm-gate] stream memops gate unavailable (%r); "
+                        "collectives fall back to host-side launch windows", ex,
+                    )
+            return self._gate
+
+    def gate_stats(self) -> Dict[str, int]:
+        g = self._gate
+        return {"writes": g.n_writes, "waits": g.n_waits} if g is not None else {}
+
     def uses_kernel_window(self) -> bool:
-        # Both modes launch the collective with async_op=True and track its Work.
-        return self._window_mode in ("kernel", "gpu", "auto")
+        # These modes launch the collective with async_op=True and track its Work.
+        return self._window_mode in ("kernel", "gpu", "auto", "gate")
 
     def begin_kernel_region(self, tag: str | None = None) -> _KernelCommRegion | None:
         if not self.uses_kernel_window() or not torch.cuda.is_available():
             return None
+        if self._window_mode == "gate":
+            gate = self.stream_gate()
+            if gate is None:
+                return None
+            return _KernelCommRegion(self, tag or "comm", gate=gate)
         return _KernelCommRegion(
             self, tag or "comm", gpu_timed=(self._window_mode in ("gpu", "auto"))
         )

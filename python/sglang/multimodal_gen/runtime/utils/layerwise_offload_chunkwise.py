@@ -2,6 +2,7 @@ import os
 import re
 import threading
 import time
+from collections import deque
 from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import chain
@@ -125,6 +126,13 @@ class LayerwiseOffloadManager:
         self.comm_patch_torch_distributed = comm_patch_torch_distributed
         self.comm_active_window_mode = comm_active_window_mode
         self.prefetch_chunk_size_bytes = max(1, prefetch_chunk_size_mb) * 1024 * 1024
+        # window mode "gate": GPU-gated asynchronous chunk issue (see comm_aware_prefetch._StreamGate)
+        self._gate_mode = str(comm_active_window_mode or "").strip().lower() in {
+            "gate", "memops", "stream_gate"
+        }
+        self._stream_gate = None
+        self._gate_inflight: deque = deque()
+        self._gate_inflight_cap = max(1, _env_int("SGLANG_DIT_GATE_INFLIGHT_CHUNKS", 64))
         self.submodule_granularity = submodule_granularity
         self._coarse_phase_specs: Tuple[PhaseSpec, ...] = tuple(
             phase_specs or (PhaseSpec(name="layer", prefixes=("",)),)
@@ -1203,6 +1211,44 @@ class LayerwiseOffloadManager:
             if after_drain is not None:
                 after_drain()
 
+    def _stream_gate_for_copy(self):
+        if not self._gate_mode:
+            return None
+        if self._stream_gate is None and self.comm_tracker is not None:
+            self._stream_gate = self.comm_tracker.stream_gate(self.device)
+            if self._stream_gate is None:
+                # gate unavailable: fall back to the blocking per-chunk copies
+                self._gate_mode = False
+        return self._stream_gate
+
+    def _gate_reap_inflight(self, *, wait_oldest: bool = False) -> None:
+        """Retire completed asynchronous chunks; their durations come from the events."""
+        q = self._gate_inflight
+        if wait_oldest and q:
+            q[0][1].synchronize()
+        while q and q[0][1].query():
+            start_event, done_event, nbytes, background = q.popleft()
+            try:
+                dur_s = max(0.0, float(start_event.elapsed_time(done_event))) / 1e3
+            except Exception:
+                dur_s = 0.0
+            self._record_copy_stats(background=background, nbytes=nbytes, dur_s=dur_s)
+            if dur_s > 0:
+                inst_bw = nbytes / dur_s
+                self._h2d_bw_ema = (
+                    inst_bw if self._h2d_bw_ema <= 0 else 0.9 * self._h2d_bw_ema + 0.1 * inst_bw
+                )
+                self._h2d_bw_ema_free = (
+                    inst_bw if self._h2d_bw_ema_free <= 0
+                    else 0.9 * self._h2d_bw_ema_free + 0.1 * inst_bw
+                )
+
+    def _gate_throttle_inflight(self) -> None:
+        # The gate itself needs no bound; this keeps the enqueue-ahead depth (and the
+        # event bookkeeping) small. 64 x 4 MB = one block of Wan 5B.
+        while len(self._gate_inflight) >= self._gate_inflight_cap:
+            self._gate_reap_inflight(wait_oldest=True)
+
     @torch.compiler.disable
     def _copy_one_chunk(
         self, layer_idx: int, phase_idx: int, *, background: bool
@@ -1317,11 +1363,26 @@ class LayerwiseOffloadManager:
                 push_detail_nvtx = True
             try:
                 copy_t0 = time.perf_counter()
+                gate = self._stream_gate_for_copy()
                 with torch.cuda.stream(self.copy_stream):
-                    # Intentionally blocking per chunk for strict comm-aware checkpoints.
-                    dst.copy_(src, non_blocking=False)
-                    chunk_done_event = torch.cuda.Event()
-                    chunk_done_event.record(self.copy_stream)
+                    if gate is not None:
+                        # GPU-gated asynchronous issue: the copy stream itself waits for
+                        # the comm flag to be 0 before this chunk; the host never blocks.
+                        self._gate_throttle_inflight()
+                        gate.wait_zero(self.copy_stream)
+                        chunk_start_event = torch.cuda.Event(enable_timing=True)
+                        chunk_start_event.record(self.copy_stream)
+                        dst.copy_(src, non_blocking=True)
+                        chunk_done_event = torch.cuda.Event(enable_timing=True)
+                        chunk_done_event.record(self.copy_stream)
+                        self._gate_inflight.append(
+                            (chunk_start_event, chunk_done_event, int(nbytes), bool(background))
+                        )
+                    else:
+                        # Intentionally blocking per chunk for strict comm-aware checkpoints.
+                        dst.copy_(src, non_blocking=False)
+                        chunk_done_event = torch.cuda.Event()
+                        chunk_done_event.record(self.copy_stream)
                 copy_dur_s = time.perf_counter() - copy_t0
             finally:
                 if push_nvtx:
@@ -1330,7 +1391,13 @@ class LayerwiseOffloadManager:
                     torch.cuda.nvtx.range_pop()
                     torch.cuda.nvtx.range_pop()
 
-            self._record_copy_stats(background=background, nbytes=nbytes, dur_s=copy_dur_s)
+            if gate is not None:
+                # Asynchronous issue: the host time above is the enqueue time; the copy
+                # durations are read from the chunk events when they are reaped.
+                self._gate_reap_inflight()
+                copy_dur_s = 0.0
+            else:
+                self._record_copy_stats(background=background, nbytes=nbytes, dur_s=copy_dur_s)
             if copy_dur_s > 0:
                 inst_bw = nbytes / copy_dur_s
                 self._h2d_bw_ema = (
@@ -2251,6 +2318,13 @@ class OffloadableDiTMixin:
 
     def quiesce_prefetch_for_comm(self, after_drain=None) -> None:
         if self.layerwise_offload_managers is None:
+            if after_drain is not None:
+                after_drain()
+            return
+        tracker = self.comm_activity_tracker
+        if tracker is not None and getattr(tracker, "window_mode", None) == "gate":
+            # GPU-gated prefetch: the copy stream pauses itself at the collective; no
+            # host-side drain of the copy stream before the launch.
             if after_drain is not None:
                 after_drain()
             return
