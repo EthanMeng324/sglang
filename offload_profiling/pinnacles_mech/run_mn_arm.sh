@@ -31,7 +31,8 @@ export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
 if [[ "$NNODES" -gt 1 ]]; then
     # Pinnacles: the IPoIB (ib0) addresses are not routable between nodes, so the NCCL/gloo bootstrap
     # must use the Ethernet interface; the data path still uses the IB HCA (verbs).
-    export NCCL_SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-en0}" GLOO_SOCKET_IFNAME="${GLOO_SOCKET_IFNAME:-en0}" NCCL_IB_HCA="${NCCL_IB_HCA:-mlx5_0}"
+    if [[ -z "${NCCL_SOCKET_IFNAME:-}" && -d /sys/class/net/en0 ]]; then export NCCL_SOCKET_IFNAME=en0 GLOO_SOCKET_IFNAME="${GLOO_SOCKET_IFNAME:-en0}"; fi
+    if [[ -z "${NCCL_IB_HCA:-}" && -d /sys/class/infiniband/mlx5_0 ]]; then export NCCL_IB_HCA=mlx5_0; fi
 fi
 
 PROMPT="A cat walks on the grass, realistic"
