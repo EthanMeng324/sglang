@@ -26,7 +26,7 @@ for rel, old, new in [
 ]:
     p = ws / rel
     s = p.read_text()
-    if "NCCL_SOCKET_IFNAME" in s:
+    if "NCCL_SOCKET_IFNAME:-en0" in s:
         print("already patched:", p)
         continue
     assert s.count(old) == 1, f"{p}: pattern not found exactly once"

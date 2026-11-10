@@ -28,6 +28,11 @@ export SGLANG_DIFFUSION_SYNC_STAGE_PROFILING=1 SGLANG_DIFFUSION_STAGE_LOGGING=1 
 # cross-node NCCL/gloo: set NCCL_SOCKET_IFNAME / GLOO_SOCKET_IFNAME / NCCL_IB_HCA in the environment if the
 # default interface selection is wrong for this cluster (see the runbook)
 export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
+if [[ "$NNODES" -gt 1 ]]; then
+    # Pinnacles: the IPoIB (ib0) addresses are not routable between nodes, so the NCCL/gloo bootstrap
+    # must use the Ethernet interface; the data path still uses the IB HCA (verbs).
+    export NCCL_SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-en0}" GLOO_SOCKET_IFNAME="${GLOO_SOCKET_IFNAME:-en0}" NCCL_IB_HCA="${NCCL_IB_HCA:-mlx5_0}"
+fi
 
 PROMPT="A cat walks on the grass, realistic"
 case "$MODEL" in
