@@ -2,3 +2,7 @@
 [18:27:38] node=0 ARM=no rc=0 wall=435s average time per step: 11.7740
 [18:27:39] node=0/1 host=gh007.hpc.nyu.edu ARM=old total_gpus=2 master=gh007:29507 env: SGLANG_DIT_COMM_AWARE_OFFLOAD=0 SGLANG_DIT_OFFLOAD_COMM_QUIESCE=1
 [18:32:34] node=0 ARM=old rc=0 wall=295s average time per step: 3.9450
+[16:54:58] node=0/1 host=gh015.hpc.nyu.edu ARM=stock total_gpus=2 master=gh015:29507 env: SGLANG_DIT_COMM_AWARE_OFFLOAD=0 SGLANG_DIT_OFFLOAD_COMM_QUIESCE=0
+[16:59:40] node=0 ARM=stock rc=0 wall=282s average time per step: 3.9954
+[16:59:40] node=0/1 host=gh015.hpc.nyu.edu ARM=gate total_gpus=2 master=gh015:29507 env: SGLANG_DIT_COMM_AWARE_OFFLOAD=1 SGLANG_DIT_PHASE_AWARE_PREFETCH=0 SGLANG_DIT_COMM_PREFETCH_CHUNK_SIZE_MB=16 SGLANG_DIT_COMM_AWARE_PATCH_TORCH_DIST=0 SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE=gate SGLANG_DIT_OFFLOAD_RESIDENT_RATIO=
+[17:04:05] node=0 ARM=gate rc=0 wall=265s average time per step: 3.3558

@@ -23,7 +23,9 @@ fi
 log "platform $PLAT job=$SLURM_JOB_ID restart=${SLURM_RESTART_COUNT:-0} nodes=$SLURM_JOB_NODELIST master=$MASTER_ADDR"
 [ -s $WS/results/topo_$PLAT.txt ] || "${TOPO[@]}" > $WS/results/topo_$PLAT.txt 2>&1
 first=1
-for f in 41 81 121 161; do for arm in no old; do
+export CHUNK_MB=16    # run_mn_arm.sh defaults to 4; the paper and all comparisons use 16 MB chunks
+if [ $PLAT = h100 ]; then ARMS="no old stock gate"; else ARMS="no old"; fi   # stock/gate only on the H100 platform
+for f in 41 81 121 161; do for arm in $ARMS; do
   OUTD=$WS/results/wan_c${f}_mn$((NNODES*GPUS_PER_NODE))_${TAG}
   if grep -q "average time per step" $OUTD/logs/$arm.log 2>/dev/null; then log "skip $f $arm (already has a result)"; continue; fi
   if [ $first = 1 ]; then export NCCL_DEBUG=INFO; else export NCCL_DEBUG=WARN; fi   # one INFO arm per start: records the transport line

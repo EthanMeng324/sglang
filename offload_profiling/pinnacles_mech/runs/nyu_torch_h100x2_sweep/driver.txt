@@ -20,3 +20,33 @@ flags: --dist-init-addr --nnodes --node-rank
 [2026-11-10 18:54:54] run 161 old NCCL_DEBUG=WARN
 [2026-11-10 18:59:15] end 161 old rc=0 average time per step: 5.0834
 [2026-11-10 18:59:15] platform h100 finished
+Already up to date.
+commit 864c48c0f Runbook: WanVideo 4-point sweep (41/81/121/161) no vs old on 2x4 L40S and on 1x2 H100 NVLink; drop the extras
+ENV 2.9.1+cu128 NVIDIA H100 80GB HBM3 sgl_kernel ok
+flags: --dist-init-addr --nnodes --node-rank 
+[2026-11-11 16:54:58] platform h100 job=22737983 restart=0 nodes=gh015 master=gh015
+[2026-11-11 16:54:58] skip 41 no (already has a result)
+[2026-11-11 16:54:58] skip 41 old (already has a result)
+[2026-11-11 16:54:58] run 41 stock NCCL_DEBUG=INFO
+[2026-11-11 16:59:40] end 41 stock rc=0 average time per step: 3.9954
+[2026-11-11 16:59:40] run 41 gate NCCL_DEBUG=WARN
+[2026-11-11 17:04:05] end 41 gate rc=0 average time per step: 3.3558
+[2026-11-11 17:04:05] skip 81 no (already has a result)
+[2026-11-11 17:04:05] skip 81 old (already has a result)
+[2026-11-11 17:04:05] run 81 stock NCCL_DEBUG=WARN
+[2026-11-11 17:08:28] end 81 stock rc=0 average time per step: 3.7655
+[2026-11-11 17:08:28] run 81 gate NCCL_DEBUG=WARN
+[2026-11-11 17:12:46] end 81 gate rc=0 average time per step: 3.7822
+[2026-11-11 17:12:46] skip 121 no (already has a result)
+[2026-11-11 17:12:46] skip 121 old (already has a result)
+[2026-11-11 17:12:46] run 121 stock NCCL_DEBUG=WARN
+[2026-11-11 17:17:09] end 121 stock rc=0 average time per step: 4.0161
+[2026-11-11 17:17:09] run 121 gate NCCL_DEBUG=WARN
+[2026-11-11 17:21:30] end 121 gate rc=0 average time per step: 3.8355
+[2026-11-11 17:21:30] skip 161 no (already has a result)
+[2026-11-11 17:21:30] skip 161 old (already has a result)
+[2026-11-11 17:21:30] run 161 stock NCCL_DEBUG=WARN
+[2026-11-11 17:26:10] end 161 stock rc=0 average time per step: 4.8087
+[2026-11-11 17:26:10] run 161 gate NCCL_DEBUG=WARN
+[2026-11-11 17:30:55] end 161 gate rc=0 average time per step: 4.7537
+[2026-11-11 17:30:55] platform h100 finished
