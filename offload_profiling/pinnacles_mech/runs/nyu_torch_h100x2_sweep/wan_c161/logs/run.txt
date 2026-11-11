@@ -1,0 +1,4 @@
+[18:50:00] node=0/1 host=gh007.hpc.nyu.edu ARM=no total_gpus=2 master=gh007:29507 env: SGLANG_DIT_COMM_AWARE_OFFLOAD=0
+[18:54:54] node=0 ARM=no rc=0 wall=294s average time per step: 8.4475
+[18:54:54] node=0/1 host=gh007.hpc.nyu.edu ARM=old total_gpus=2 master=gh007:29507 env: SGLANG_DIT_COMM_AWARE_OFFLOAD=0 SGLANG_DIT_OFFLOAD_COMM_QUIESCE=1
+[18:59:15] node=0 ARM=old rc=0 wall=261s average time per step: 5.0834

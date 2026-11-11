@@ -1,0 +1,22 @@
+Already up to date.
+commit 864c48c0f Runbook: WanVideo 4-point sweep (41/81/121/161) no vs old on 2x4 L40S and on 1x2 H100 NVLink; drop the extras
+ENV 2.9.1+cu128 NVIDIA H100 80GB HBM3 sgl_kernel ok
+flags: --dist-init-addr --nnodes --node-rank 
+[2026-11-10 18:20:22] platform h100 job=22596821 restart=0 nodes=gh007 master=gh007
+[2026-11-10 18:20:23] run 41 no NCCL_DEBUG=INFO
+[2026-11-10 18:27:39] end 41 no rc=0 average time per step: 11.7740
+[2026-11-10 18:27:39] run 41 old NCCL_DEBUG=WARN
+[2026-11-10 18:32:34] end 41 old rc=0 average time per step: 3.9450
+[2026-11-10 18:32:34] run 81 no NCCL_DEBUG=WARN
+[2026-11-10 18:36:56] end 81 no rc=0 average time per step: 7.4798
+[2026-11-10 18:36:57] run 81 old NCCL_DEBUG=WARN
+[2026-11-10 18:41:03] end 81 old rc=0 average time per step: 4.3351
+[2026-11-10 18:41:03] run 121 no NCCL_DEBUG=WARN
+[2026-11-10 18:45:44] end 121 no rc=0 average time per step: 8.5184
+[2026-11-10 18:45:44] run 121 old NCCL_DEBUG=WARN
+[2026-11-10 18:50:00] end 121 old rc=0 average time per step: 4.4822
+[2026-11-10 18:50:00] run 161 no NCCL_DEBUG=WARN
+[2026-11-10 18:54:54] end 161 no rc=0 average time per step: 8.4475
+[2026-11-10 18:54:54] run 161 old NCCL_DEBUG=WARN
+[2026-11-10 18:59:15] end 161 old rc=0 average time per step: 5.0834
+[2026-11-10 18:59:15] platform h100 finished

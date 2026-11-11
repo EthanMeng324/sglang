@@ -1,0 +1,2036 @@
+[11-10 18:21:21] server_args: {"model_path": "/scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers", "backend": "auto", "attention_backend": "fa", "attention_backend_config": {}, "cache_dit_config": null, "nccl_port": null, "trust_remote_code": false, "revision": null, "num_gpus": 2, "nnodes": 1, "node_rank": 0, "dist_init_addr": "gh007:29507", "tp_size": 1, "sp_degree": 2, "ulysses_degree": 2, "ring_degree": 1, "dp_size": 1, "dp_degree": 1, "enable_cfg_parallel": false, "hsdp_replicate_dim": 1, "hsdp_shard_dim": 2, "dist_timeout": 900, "pipeline_class_name": null, "lora_path": null, "lora_nickname": "default", "lora_scale": 1.0, "vae_path": null, "lora_target_modules": null, "dit_cpu_offload": true, "dit_layerwise_offload": false, "dit_offload_prefetch_size": 0.0, "dit_offload_resident_phases": "", "dit_offload_phase_prefetch_depth": 4, "dit_offload_resident_ratio": null, "dit_comm_active_window_mode": "kernel", "text_encoder_cpu_offload": true, "image_encoder_cpu_offload": true, "vae_cpu_offload": true, "use_fsdp_inference": false, "pin_cpu_memory": true, "comfyui_mode": false, "enable_torch_compile": true, "warmup": false, "warmup_resolutions": null, "disable_autocast": false, "master_port": 29507, "host": "127.0.0.1", "port": 30007, "webui": false, "webui_port": 12312, "scheduler_port": 5707, "output_path": "/scratch/yx2432/rebuttal_mn/results/wan_c41_mn2_h100", "prompt_file_path": null, "model_paths": {}, "model_loaded": {"transformer": true, "vae": true, "video_vae": true, "audio_vae": true, "video_dit": true, "audio_dit": true, "dual_tower_bridge": true}, "boundary_ratio": null, "log_level": "info"}
+[11-10 18:21:21] Local mode: True
+[11-10 18:21:21] Starting server...
+[11-10 18:22:08] Scheduler bind at endpoint: tcp://127.0.0.1:5707
+[11-10 18:22:08] Initializing distributed environment with world_size=2, device=cuda:0, timeout=900
+[11-10 18:22:08] Setting distributed timeout to 900 seconds
+gh007:2125087:2125087 [0] NCCL INFO Bootstrap: Using ibs9:10.0.10.64<0>
+gh007:2125087:2125087 [0] NCCL INFO cudaDriverVersion 13030
+gh007:2125087:2125087 [0] NCCL INFO NCCL version 2.27.5+cuda12.9
+gh007:2125088:2125088 [1] NCCL INFO cudaDriverVersion 13030
+gh007:2125087:2125087 [0] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125088 [1] NCCL INFO Bootstrap: Using ibs9:10.0.10.64<0>
+gh007:2125088:2125088 [1] NCCL INFO NCCL version 2.27.5+cuda12.9
+gh007:2125088:2125088 [1] NCCL INFO Comm config Blocking set to 1
+gh007:2125087:2125592 [0] NCCL INFO NET/Plugin: Could not find: libnccl-net.so. 
+gh007:2125088:2125593 [1] NCCL INFO NET/Plugin: Could not find: libnccl-net.so. 
+gh007:2125087:2125592 [0] NCCL INFO NET/IB : Using [0]mlx5_0:1/RoCE [1]mlx5_2:1/IB [2]mlx5_3:1/IB [3]mlx5_4:1/IB [4]mlx5_5:1/IB [RO]; OOB ibs9:10.0.10.64<0>
+gh007:2125087:2125592 [0] NCCL INFO Initialized NET plugin IB
+gh007:2125087:2125592 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125592 [0] NCCL INFO Using network IB
+gh007:2125088:2125593 [1] NCCL INFO NET/IB : Using [0]mlx5_0:1/RoCE [1]mlx5_2:1/IB [2]mlx5_3:1/IB [3]mlx5_4:1/IB [4]mlx5_5:1/IB [RO]; OOB ibs9:10.0.10.64<0>
+gh007:2125088:2125593 [1] NCCL INFO Initialized NET plugin IB
+gh007:2125088:2125593 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125593 [1] NCCL INFO Using network IB
+gh007:2125087:2125592 [0] NCCL INFO ncclCommInitRankConfig comm 0x47ca5bc0 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 commId 0x8cf1c2676193ed64 - Init START
+gh007:2125088:2125593 [1] NCCL INFO ncclCommInitRankConfig comm 0x4565ffd0 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 commId 0x8cf1c2676193ed64 - Init START
+gh007:2125088:2125593 [1] NCCL INFO RAS client listening socket at ::1<28028>
+gh007:2125087:2125592 [0] NCCL INFO RAS client listening socket at ::1<28028>
+gh007:2125087:2125592 [0] NCCL INFO Bootstrap timings total 0.043330 (create 0.000070, send 0.000244, recv 0.042244, ring 0.000033, delay 0.000000)
+gh007:2125088:2125593 [1] NCCL INFO Bootstrap timings total 0.001327 (create 0.000047, send 0.000140, recv 0.000431, ring 0.000036, delay 0.000000)
+gh007:2125087:2125592 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125088:2125593 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125087:2125592 [0] NCCL INFO comm 0x47ca5bc0 rank 0 nRanks 2 nNodes 1 localRanks 2 localRank 0 MNNVL 0
+gh007:2125087:2125592 [0] NCCL INFO Channel 00/08 : 0 1
+gh007:2125087:2125592 [0] NCCL INFO Channel 01/08 : 0 1
+gh007:2125087:2125592 [0] NCCL INFO Channel 02/08 : 0 1
+gh007:2125087:2125592 [0] NCCL INFO Channel 03/08 : 0 1
+gh007:2125087:2125592 [0] NCCL INFO Channel 04/08 : 0 1
+gh007:2125087:2125592 [0] NCCL INFO Channel 05/08 : 0 1
+gh007:2125087:2125592 [0] NCCL INFO Channel 06/08 : 0 1
+gh007:2125088:2125593 [1] NCCL INFO comm 0x4565ffd0 rank 1 nRanks 2 nNodes 1 localRanks 2 localRank 1 MNNVL 0
+gh007:2125087:2125592 [0] NCCL INFO Channel 07/08 : 0 1
+gh007:2125087:2125592 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 1/-1/-1->0->-1 [2] -1/-1/-1->0->1 [3] -1/-1/-1->0->1 [4] 1/-1/-1->0->-1 [5] 1/-1/-1->0->-1 [6] -1/-1/-1->0->1 [7] -1/-1/-1->0->1
+gh007:2125087:2125592 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125088:2125593 [1] NCCL INFO Trees [0] -1/-1/-1->1->0 [1] -1/-1/-1->1->0 [2] 0/-1/-1->1->-1 [3] 0/-1/-1->1->-1 [4] -1/-1/-1->1->0 [5] -1/-1/-1->1->0 [6] 0/-1/-1->1->-1 [7] 0/-1/-1->1->-1
+gh007:2125088:2125593 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125592 [0] NCCL INFO PROFILER/Plugin: Could not find: libnccl-profiler.so. 
+gh007:2125087:2125592 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0
+gh007:2125087:2125607 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 27
+gh007:2125087:2125606 [0] NCCL INFO [Proxy Service] Device 0 CPU core 21
+gh007:2125088:2125593 [1] NCCL INFO PROFILER/Plugin: Could not find: libnccl-profiler.so. 
+gh007:2125088:2125609 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125088:2125608 [1] NCCL INFO [Proxy Service] Device 1 CPU core 55
+gh007:2125087:2125592 [0] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125087:2125592 [0] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125088:2125593 [1] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125088:2125593 [1] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125087:2125592 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125087:2125592 [0] NCCL INFO TUNER/Plugin: Could not find: libnccl-tuner.so. Using internal tuner plugin.
+gh007:2125087:2125592 [0] NCCL INFO ncclCommInitRankConfig comm 0x47ca5bc0 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 commId 0x8cf1c2676193ed64 - Init COMPLETE
+gh007:2125087:2125592 [0] NCCL INFO Init timings - ncclCommInitRankConfig: rank 0 nranks 2 total 0.81 (kernels 0.47, alloc 0.23, bootstrap 0.04, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.01, rest 0.03)
+gh007:2125088:2125593 [1] NCCL INFO TUNER/Plugin: Could not find: libnccl-tuner.so. Using internal tuner plugin.
+gh007:2125088:2125593 [1] NCCL INFO ncclCommInitRankConfig comm 0x4565ffd0 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 commId 0x8cf1c2676193ed64 - Init COMPLETE
+gh007:2125088:2125593 [1] NCCL INFO Init timings - ncclCommInitRankConfig: rank 1 nranks 2 total 0.81 (kernels 0.47, alloc 0.27, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.01, rest 0.04)
+gh007:2125087:2125087 [0] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125088 [1] NCCL INFO Comm config Blocking set to 1
+gh007:2125087:2125613 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125613 [0] NCCL INFO Using network IB
+gh007:2125088:2125615 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125615 [1] NCCL INFO Using network IB
+gh007:2125087:2125613 [0] NCCL INFO ncclCommSplit comm 0x47f54a00 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 1 color 2130503744 key 0- Init START
+gh007:2125088:2125615 [1] NCCL INFO ncclCommSplit comm 0x4590dd40 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 1 color 2130503744 key 1- Init START
+gh007:2125088:2125615 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125087:2125613 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125087:2125613 [0] NCCL INFO comm 0x47f54a00 rank 0 nRanks 2 nNodes 1 localRanks 2 localRank 0 MNNVL 0
+gh007:2125088:2125615 [1] NCCL INFO comm 0x4590dd40 rank 1 nRanks 2 nNodes 1 localRanks 2 localRank 1 MNNVL 0
+gh007:2125087:2125613 [0] NCCL INFO Channel 00/08 : 0 1
+gh007:2125087:2125613 [0] NCCL INFO Channel 01/08 : 0 1
+gh007:2125087:2125613 [0] NCCL INFO Channel 02/08 : 0 1
+gh007:2125087:2125613 [0] NCCL INFO Channel 03/08 : 0 1
+gh007:2125087:2125613 [0] NCCL INFO Channel 04/08 : 0 1
+gh007:2125087:2125613 [0] NCCL INFO Channel 05/08 : 0 1
+gh007:2125088:2125615 [1] NCCL INFO Trees [0] -1/-1/-1->1->0 [1] -1/-1/-1->1->0 [2] 0/-1/-1->1->-1 [3] 0/-1/-1->1->-1 [4] -1/-1/-1->1->0 [5] -1/-1/-1->1->0 [6] 0/-1/-1->1->-1 [7] 0/-1/-1->1->-1
+gh007:2125087:2125613 [0] NCCL INFO Channel 06/08 : 0 1
+gh007:2125088:2125615 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125613 [0] NCCL INFO Channel 07/08 : 0 1
+gh007:2125087:2125613 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 1/-1/-1->0->-1 [2] -1/-1/-1->0->1 [3] -1/-1/-1->0->1 [4] 1/-1/-1->0->-1 [5] 1/-1/-1->0->-1 [6] -1/-1/-1->0->1 [7] -1/-1/-1->0->1
+gh007:2125087:2125613 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125613 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0
+gh007:2125087:2125616 [0] NCCL INFO [Proxy Service] Device 0 CPU core 21
+gh007:2125087:2125618 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 8
+gh007:2125088:2125619 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125088:2125617 [1] NCCL INFO [Proxy Service] Device 1 CPU core 55
+gh007:2125087:2125613 [0] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125087:2125613 [0] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125088:2125615 [1] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125088:2125615 [1] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125087:2125613 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125087:2125613 [0] NCCL INFO ncclCommSplit comm 0x47f54a00 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 1 color 2130503744 key 0 - Init COMPLETE
+gh007:2125087:2125613 [0] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 2 total 0.03 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.01, rest 0.00)
+gh007:2125088:2125615 [1] NCCL INFO ncclCommSplit comm 0x4590dd40 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 1 color 2130503744 key 1 - Init COMPLETE
+gh007:2125088:2125615 [1] NCCL INFO Init timings - ncclCommSplit: rank 1 nranks 2 total 0.03 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.01, rest 0.00)
+[11-10 18:22:11] Found nccl from library libnccl.so.2
+[11-10 18:22:11] sglang-diffusion is using nccl==2.27.5
+gh007:2125087:2125087 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125087 [0] NCCL INFO Using network IB
+gh007:2125088:2125088 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125088 [1] NCCL INFO Using network IB
+gh007:2125087:2125087 [0] NCCL INFO ncclCommInitRank comm 0x48076360 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 commId 0xd40ec4e9522d6a03 - Init START
+gh007:2125088:2125088 [1] NCCL INFO ncclCommInitRank comm 0x45a7c530 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 commId 0xd40ec4e9522d6a03 - Init START
+gh007:2125088:2125088 [1] NCCL INFO Bootstrap timings total 0.000962 (create 0.000037, send 0.000112, recv 0.000373, ring 0.000026, delay 0.000000)
+gh007:2125087:2125087 [0] NCCL INFO Bootstrap timings total 0.001042 (create 0.000030, send 0.000176, recv 0.000281, ring 0.000026, delay 0.000000)
+gh007:2125087:2125087 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125088:2125088 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125087:2125087 [0] NCCL INFO comm 0x48076360 rank 0 nRanks 2 nNodes 1 localRanks 2 localRank 0 MNNVL 0
+gh007:2125087:2125087 [0] NCCL INFO Channel 00/08 : 0 1
+gh007:2125087:2125087 [0] NCCL INFO Channel 01/08 : 0 1
+gh007:2125088:2125088 [1] NCCL INFO comm 0x45a7c530 rank 1 nRanks 2 nNodes 1 localRanks 2 localRank 1 MNNVL 0
+gh007:2125087:2125087 [0] NCCL INFO Channel 02/08 : 0 1
+gh007:2125087:2125087 [0] NCCL INFO Channel 03/08 : 0 1
+gh007:2125087:2125087 [0] NCCL INFO Channel 04/08 : 0 1
+gh007:2125087:2125087 [0] NCCL INFO Channel 05/08 : 0 1
+gh007:2125087:2125087 [0] NCCL INFO Channel 06/08 : 0 1
+gh007:2125088:2125088 [1] NCCL INFO Trees [0] -1/-1/-1->1->0 [1] -1/-1/-1->1->0 [2] 0/-1/-1->1->-1 [3] 0/-1/-1->1->-1 [4] -1/-1/-1->1->0 [5] -1/-1/-1->1->0 [6] 0/-1/-1->1->-1 [7] 0/-1/-1->1->-1
+gh007:2125087:2125087 [0] NCCL INFO Channel 07/08 : 0 1
+gh007:2125088:2125088 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125087 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 1/-1/-1->0->-1 [2] -1/-1/-1->0->1 [3] -1/-1/-1->0->1 [4] 1/-1/-1->0->-1 [5] 1/-1/-1->0->-1 [6] -1/-1/-1->0->1 [7] -1/-1/-1->0->1
+gh007:2125087:2125087 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125087 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0
+gh007:2125087:2125627 [0] NCCL INFO [Proxy Service] Device 0 CPU core 24
+gh007:2125087:2125628 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 13
+gh007:2125088:2125630 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125088:2125629 [1] NCCL INFO [Proxy Service] Device 1 CPU core 55
+gh007:2125087:2125087 [0] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125087:2125087 [0] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125087:2125087 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125088:2125088 [1] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125088:2125088 [1] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125087:2125087 [0] NCCL INFO ncclCommInitRank comm 0x48076360 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 commId 0xd40ec4e9522d6a03 - Init COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO Init timings - ncclCommInitRank: rank 0 nranks 2 total 0.03 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.00, rest 0.00)
+gh007:2125088:2125088 [1] NCCL INFO ncclCommInitRank comm 0x45a7c530 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 commId 0xd40ec4e9522d6a03 - Init COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO Init timings - ncclCommInitRank: rank 1 nranks 2 total 0.03 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.00, rest 0.00)
+gh007:2125087:2125631 [0] NCCL INFO Channel 00/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2125631 [0] NCCL INFO Channel 01/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2125632 [1] NCCL INFO Channel 00/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2125631 [0] NCCL INFO Channel 02/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2125631 [0] NCCL INFO Channel 03/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2125631 [0] NCCL INFO Channel 04/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2125631 [0] NCCL INFO Channel 05/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2125631 [0] NCCL INFO Channel 06/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2125631 [0] NCCL INFO Channel 07/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2125632 [1] NCCL INFO Channel 01/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2125632 [1] NCCL INFO Channel 02/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2125632 [1] NCCL INFO Channel 03/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2125632 [1] NCCL INFO Channel 04/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2125632 [1] NCCL INFO Channel 05/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2125632 [1] NCCL INFO Channel 06/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2125632 [1] NCCL INFO Channel 07/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2125631 [0] NCCL INFO Connected all rings, use ring PXN 0 GDR 1
+gh007:2125088:2125632 [1] NCCL INFO Connected all rings, use ring PXN 0 GDR 1
+gh007:2125088:2125088 [1] NCCL INFO Rank 1 has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator
+gh007:2125087:2125087 [0] NCCL INFO Comm config Blocking set to 1
+gh007:2125087:2125636 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125636 [0] NCCL INFO Using network IB
+gh007:2125087:2125636 [0] NCCL INFO ncclCommSplit comm 0x48f2d900 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 2 color 59908776 key 0- Init START
+gh007:2125087:2125636 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125087:2125636 [0] NCCL INFO comm 0x48f2d900 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 00/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 01/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 02/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 03/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 04/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 05/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 06/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 07/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 08/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 09/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 10/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 11/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 12/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 13/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 14/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 15/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 16/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 17/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 18/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 19/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 20/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 21/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 22/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 23/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 24/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 25/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 26/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 27/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 28/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 29/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 30/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 31/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 32/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 33/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 34/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 35/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 36/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 37/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 38/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 39/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 40/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 41/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 42/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 43/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 44/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 45/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 46/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 47/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 48/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 49/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 50/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 51/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 52/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 53/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 54/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 55/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 56/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 57/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 58/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 59/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 60/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 61/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 62/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Channel 63/64 : 0
+gh007:2125087:2125636 [0] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125087:2125636 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125636 [0] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125087:2125638 [0] NCCL INFO [Proxy Service] Device 0 CPU core 14
+gh007:2125087:2125639 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 26
+gh007:2125087:2125636 [0] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125087:2125636 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125087:2125636 [0] NCCL INFO ncclCommSplit comm 0x48f2d900 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 2 color 59908776 key 0 - Init COMPLETE
+gh007:2125087:2125636 [0] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.04 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.02, rest 0.00)
+gh007:2125087:2125087 [0] NCCL INFO Rank 0 has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator
+gh007:2125088:2125088 [1] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125647 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125647 [1] NCCL INFO Using network IB
+gh007:2125088:2125647 [1] NCCL INFO ncclCommSplit comm 0x468ea440 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 4 color 440515407 key 0- Init START
+gh007:2125087:2125087 [0] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125647 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125088:2125647 [1] NCCL INFO comm 0x468ea440 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 00/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 01/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 02/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 03/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 04/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 05/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 06/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 07/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 08/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 09/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 10/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 11/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 12/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 13/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 14/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 15/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 16/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 17/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 18/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 19/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 20/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 21/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 22/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 23/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 24/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 25/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 26/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 27/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 28/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 29/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 30/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 31/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 32/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 33/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 34/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 35/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 36/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 37/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 38/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 39/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 40/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 41/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 42/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 43/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 44/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 45/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 46/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 47/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 48/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 49/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 50/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 51/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 52/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 53/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 54/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 55/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 56/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 57/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 58/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 59/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 60/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 61/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 62/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Channel 63/64 : 0
+gh007:2125088:2125647 [1] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125088:2125647 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125088:2125647 [1] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125088:2125652 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125088:2125651 [1] NCCL INFO [Proxy Service] Device 1 CPU core 55
+gh007:2125088:2125647 [1] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125088:2125647 [1] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125088:2125647 [1] NCCL INFO ncclCommSplit comm 0x468ea440 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 4 color 440515407 key 0 - Init COMPLETE
+gh007:2125088:2125647 [1] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.04 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.02, rest 0.00)
+gh007:2125088:2125088 [1] NCCL INFO Rank 1 has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator
+gh007:2125087:2125650 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125650 [0] NCCL INFO Using network IB
+gh007:2125087:2125650 [0] NCCL INFO ncclCommSplit comm 0x49038cb0 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 5 color 59908776 key 0- Init START
+gh007:2125087:2125650 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125087:2125650 [0] NCCL INFO comm 0x49038cb0 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 00/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 01/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 02/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 03/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 04/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 05/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 06/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 07/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 08/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 09/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 10/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 11/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 12/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 13/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 14/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 15/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 16/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 17/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 18/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 19/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 20/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 21/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 22/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 23/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 24/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 25/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 26/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 27/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 28/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 29/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 30/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 31/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 32/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 33/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 34/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 35/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 36/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 37/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 38/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 39/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 40/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 41/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 42/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 43/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 44/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 45/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 46/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 47/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 48/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 49/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 50/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 51/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 52/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 53/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 54/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 55/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 56/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 57/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 58/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 59/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 60/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 61/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 62/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Channel 63/64 : 0
+gh007:2125087:2125650 [0] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125087:2125650 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125650 [0] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125087:2125658 [0] NCCL INFO [Proxy Service] Device 0 CPU core 21
+gh007:2125087:2125659 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 16
+gh007:2125087:2125650 [0] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125087:2125650 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125087:2125650 [0] NCCL INFO ncclCommSplit comm 0x49038cb0 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 5 color 59908776 key 0 - Init COMPLETE
+gh007:2125087:2125650 [0] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.07 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.02, rest 0.04)
+gh007:2125087:2125087 [0] NCCL INFO Rank 0 has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator
+gh007:2125088:2125088 [1] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125667 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125667 [1] NCCL INFO Using network IB
+gh007:2125088:2125667 [1] NCCL INFO ncclCommSplit comm 0x469f54f0 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 7 color 440515407 key 0- Init START
+gh007:2125087:2125087 [0] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125667 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125088:2125667 [1] NCCL INFO comm 0x469f54f0 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 00/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 01/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 02/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 03/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 04/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 05/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 06/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 07/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 08/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 09/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 10/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 11/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 12/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 13/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 14/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 15/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 16/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 17/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 18/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 19/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 20/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 21/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 22/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 23/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 24/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 25/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 26/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 27/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 28/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 29/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 30/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 31/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 32/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 33/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 34/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 35/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 36/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 37/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 38/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 39/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 40/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 41/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 42/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 43/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 44/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 45/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 46/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 47/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 48/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 49/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 50/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 51/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 52/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 53/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 54/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 55/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 56/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 57/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 58/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 59/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 60/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 61/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 62/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Channel 63/64 : 0
+gh007:2125088:2125667 [1] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125088:2125667 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125088:2125667 [1] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125088:2125672 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125088:2125671 [1] NCCL INFO [Proxy Service] Device 1 CPU core 55
+gh007:2125088:2125667 [1] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125088:2125667 [1] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125088:2125667 [1] NCCL INFO ncclCommSplit comm 0x469f54f0 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 7 color 440515407 key 0 - Init COMPLETE
+gh007:2125088:2125667 [1] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.03 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.02, rest 0.00)
+gh007:2125088:2125088 [1] NCCL INFO Rank 1 has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator
+gh007:2125087:2125670 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125670 [0] NCCL INFO Using network IB
+gh007:2125087:2125670 [0] NCCL INFO ncclCommSplit comm 0x49144dc0 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 8 color 59908776 key 0- Init START
+gh007:2125087:2125670 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125087:2125670 [0] NCCL INFO comm 0x49144dc0 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 00/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 01/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 02/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 03/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 04/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 05/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 06/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 07/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 08/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 09/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 10/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 11/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 12/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 13/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 14/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 15/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 16/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 17/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 18/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 19/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 20/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 21/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 22/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 23/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 24/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 25/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 26/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 27/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 28/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 29/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 30/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 31/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 32/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 33/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 34/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 35/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 36/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 37/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 38/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 39/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 40/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 41/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 42/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 43/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 44/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 45/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 46/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 47/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 48/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 49/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 50/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 51/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 52/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 53/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 54/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 55/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 56/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 57/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 58/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 59/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 60/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 61/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 62/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Channel 63/64 : 0
+gh007:2125087:2125670 [0] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125087:2125670 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125670 [0] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125087:2125678 [0] NCCL INFO [Proxy Service] Device 0 CPU core 22
+gh007:2125087:2125679 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 15
+gh007:2125087:2125670 [0] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125087:2125670 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125087:2125670 [0] NCCL INFO ncclCommSplit comm 0x49144dc0 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 8 color 59908776 key 0 - Init COMPLETE
+gh007:2125087:2125670 [0] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.09 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.02, rest 0.05)
+gh007:2125087:2125087 [0] NCCL INFO Rank 0 has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator
+gh007:2125088:2125088 [1] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125687 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125687 [1] NCCL INFO Using network IB
+gh007:2125088:2125687 [1] NCCL INFO ncclCommSplit comm 0x46b010f0 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 10 color 440515407 key 0- Init START
+gh007:2125087:2125087 [0] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125687 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125088:2125687 [1] NCCL INFO comm 0x46b010f0 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 00/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 01/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 02/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 03/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 04/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 05/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 06/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 07/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 08/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 09/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 10/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 11/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 12/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 13/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 14/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 15/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 16/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 17/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 18/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 19/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 20/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 21/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 22/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 23/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 24/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 25/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 26/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 27/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 28/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 29/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 30/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 31/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 32/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 33/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 34/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 35/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 36/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 37/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 38/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 39/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 40/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 41/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 42/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 43/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 44/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 45/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 46/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 47/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 48/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 49/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 50/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 51/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 52/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 53/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 54/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 55/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 56/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 57/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 58/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 59/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 60/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 61/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 62/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Channel 63/64 : 0
+gh007:2125088:2125687 [1] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125088:2125687 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125088:2125687 [1] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125088:2125691 [1] NCCL INFO [Proxy Service] Device 1 CPU core 55
+gh007:2125088:2125692 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125088:2125687 [1] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125088:2125687 [1] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125088:2125687 [1] NCCL INFO ncclCommSplit comm 0x46b010f0 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 10 color 440515407 key 0 - Init COMPLETE
+gh007:2125088:2125687 [1] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.04 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.02, rest 0.00)
+gh007:2125088:2125088 [1] NCCL INFO Rank 1 has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator
+gh007:2125087:2125690 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125690 [0] NCCL INFO Using network IB
+gh007:2125087:2125690 [0] NCCL INFO ncclCommSplit comm 0x49250c20 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 11 color 59908776 key 0- Init START
+gh007:2125087:2125690 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125087:2125690 [0] NCCL INFO comm 0x49250c20 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 00/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 01/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 02/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 03/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 04/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 05/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 06/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 07/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 08/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 09/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 10/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 11/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 12/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 13/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 14/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 15/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 16/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 17/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 18/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 19/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 20/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 21/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 22/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 23/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 24/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 25/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 26/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 27/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 28/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 29/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 30/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 31/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 32/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 33/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 34/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 35/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 36/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 37/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 38/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 39/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 40/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 41/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 42/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 43/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 44/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 45/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 46/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 47/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 48/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 49/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 50/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 51/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 52/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 53/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 54/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 55/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 56/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 57/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 58/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 59/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 60/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 61/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 62/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Channel 63/64 : 0
+gh007:2125087:2125690 [0] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125087:2125690 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125690 [0] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125087:2125698 [0] NCCL INFO [Proxy Service] Device 0 CPU core 21
+gh007:2125087:2125699 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 15
+gh007:2125087:2125690 [0] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125087:2125690 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125087:2125690 [0] NCCL INFO ncclCommSplit comm 0x49250c20 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 11 color 59908776 key 0 - Init COMPLETE
+gh007:2125087:2125690 [0] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.07 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.02, rest 0.04)
+gh007:2125087:2125087 [0] NCCL INFO Rank 0 has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator
+gh007:2125088:2125088 [1] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125707 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125707 [1] NCCL INFO Using network IB
+gh007:2125088:2125707 [1] NCCL INFO ncclCommSplit comm 0x46c0ccf0 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 13 color 440515407 key 0- Init START
+gh007:2125087:2125087 [0] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125707 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125088:2125707 [1] NCCL INFO comm 0x46c0ccf0 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 00/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 01/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 02/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 03/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 04/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 05/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 06/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 07/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 08/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 09/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 10/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 11/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 12/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 13/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 14/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 15/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 16/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 17/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 18/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 19/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 20/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 21/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 22/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 23/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 24/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 25/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 26/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 27/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 28/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 29/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 30/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 31/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 32/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 33/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 34/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 35/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 36/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 37/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 38/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 39/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 40/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 41/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 42/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 43/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 44/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 45/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 46/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 47/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 48/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 49/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 50/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 51/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 52/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 53/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 54/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 55/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 56/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 57/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 58/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 59/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 60/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 61/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 62/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Channel 63/64 : 0
+gh007:2125088:2125707 [1] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125088:2125707 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125088:2125707 [1] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125088:2125712 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125088:2125711 [1] NCCL INFO [Proxy Service] Device 1 CPU core 55
+gh007:2125088:2125707 [1] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125088:2125707 [1] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125088:2125707 [1] NCCL INFO ncclCommSplit comm 0x46c0ccf0 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 13 color 440515407 key 0 - Init COMPLETE
+gh007:2125088:2125707 [1] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.04 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.02, rest 0.00)
+gh007:2125088:2125088 [1] NCCL INFO Rank 1 has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator
+gh007:2125087:2125710 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125710 [0] NCCL INFO Using network IB
+gh007:2125088:2125088 [1] NCCL INFO Comm config Blocking set to 1
+gh007:2125087:2125710 [0] NCCL INFO ncclCommSplit comm 0x4935c980 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 14 color 59908776 key 0- Init START
+gh007:2125087:2125710 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125087:2125710 [0] NCCL INFO comm 0x4935c980 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 00/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 01/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 02/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 03/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 04/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 05/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 06/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 07/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 08/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 09/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 10/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 11/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 12/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 13/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 14/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 15/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 16/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 17/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 18/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 19/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 20/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 21/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 22/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 23/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 24/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 25/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 26/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 27/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 28/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 29/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 30/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 31/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 32/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 33/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 34/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 35/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 36/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 37/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 38/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 39/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 40/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 41/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 42/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 43/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 44/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 45/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 46/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 47/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 48/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 49/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 50/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 51/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 52/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 53/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 54/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 55/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 56/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 57/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 58/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 59/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 60/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 61/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 62/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Channel 63/64 : 0
+gh007:2125087:2125710 [0] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125087:2125710 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125710 [0] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125087:2125720 [0] NCCL INFO [Proxy Service] Device 0 CPU core 22
+gh007:2125087:2125721 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 8
+gh007:2125087:2125710 [0] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125087:2125710 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125087:2125710 [0] NCCL INFO ncclCommSplit comm 0x4935c980 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 14 color 59908776 key 0 - Init COMPLETE
+gh007:2125087:2125710 [0] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.07 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.02, rest 0.04)
+gh007:2125087:2125087 [0] NCCL INFO Rank 0 has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator
+gh007:2125088:2125719 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125719 [1] NCCL INFO Using network IB
+gh007:2125088:2125719 [1] NCCL INFO ncclCommSplit comm 0x46d18a50 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 15 color 440515407 key 0- Init START
+gh007:2125088:2125719 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125088:2125719 [1] NCCL INFO comm 0x46d18a50 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 00/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 01/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 02/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 03/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 04/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 05/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 06/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 07/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 08/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 09/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 10/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 11/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 12/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 13/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 14/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 15/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 16/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 17/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 18/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 19/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 20/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 21/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 22/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 23/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 24/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 25/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 26/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 27/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 28/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 29/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 30/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 31/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 32/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 33/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 34/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 35/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 36/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 37/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 38/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 39/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 40/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 41/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 42/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 43/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 44/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 45/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 46/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 47/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 48/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 49/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 50/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 51/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 52/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 53/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 54/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 55/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 56/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 57/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 58/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 59/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 60/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 61/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 62/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Channel 63/64 : 0
+gh007:2125088:2125719 [1] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125088:2125719 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125088:2125719 [1] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125088:2125724 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125088:2125723 [1] NCCL INFO [Proxy Service] Device 1 CPU core 55
+gh007:2125087:2125087 [0] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125719 [1] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125088:2125719 [1] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125088:2125719 [1] NCCL INFO ncclCommSplit comm 0x46d18a50 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 15 color 440515407 key 0 - Init COMPLETE
+gh007:2125088:2125719 [1] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.07 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.02, rest 0.04)
+gh007:2125088:2125088 [1] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125730 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125730 [1] NCCL INFO Using network IB
+gh007:2125087:2125727 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125727 [0] NCCL INFO Using network IB
+gh007:2125088:2125730 [1] NCCL INFO ncclCommSplit comm 0x46f21480 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 16 color 2130503744 key 1- Init START
+gh007:2125087:2125727 [0] NCCL INFO ncclCommSplit comm 0x495655c0 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 16 color 2130503744 key 0- Init START
+gh007:2125088:2125730 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125087:2125727 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125087:2125727 [0] NCCL INFO comm 0x495655c0 rank 0 nRanks 2 nNodes 1 localRanks 2 localRank 0 MNNVL 0
+gh007:2125088:2125730 [1] NCCL INFO comm 0x46f21480 rank 1 nRanks 2 nNodes 1 localRanks 2 localRank 1 MNNVL 0
+gh007:2125087:2125727 [0] NCCL INFO Channel 00/08 : 0 1
+gh007:2125087:2125727 [0] NCCL INFO Channel 01/08 : 0 1
+gh007:2125088:2125730 [1] NCCL INFO Trees [0] -1/-1/-1->1->0 [1] -1/-1/-1->1->0 [2] 0/-1/-1->1->-1 [3] 0/-1/-1->1->-1 [4] -1/-1/-1->1->0 [5] -1/-1/-1->1->0 [6] 0/-1/-1->1->-1 [7] 0/-1/-1->1->-1
+gh007:2125087:2125727 [0] NCCL INFO Channel 02/08 : 0 1
+gh007:2125088:2125730 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125727 [0] NCCL INFO Channel 03/08 : 0 1
+gh007:2125087:2125727 [0] NCCL INFO Channel 04/08 : 0 1
+gh007:2125087:2125727 [0] NCCL INFO Channel 05/08 : 0 1
+gh007:2125087:2125727 [0] NCCL INFO Channel 06/08 : 0 1
+gh007:2125087:2125727 [0] NCCL INFO Channel 07/08 : 0 1
+gh007:2125087:2125727 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 1/-1/-1->0->-1 [2] -1/-1/-1->0->1 [3] -1/-1/-1->0->1 [4] 1/-1/-1->0->-1 [5] 1/-1/-1->0->-1 [6] -1/-1/-1->0->1 [7] -1/-1/-1->0->1
+gh007:2125087:2125727 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125727 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0
+gh007:2125087:2125732 [0] NCCL INFO [Proxy Service] Device 0 CPU core 20
+gh007:2125087:2125734 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 25
+gh007:2125088:2125733 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125088:2125731 [1] NCCL INFO [Proxy Service] Device 1 CPU core 55
+gh007:2125088:2125730 [1] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125088:2125730 [1] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125087:2125727 [0] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125087:2125727 [0] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125087:2125727 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125088:2125730 [1] NCCL INFO ncclCommSplit comm 0x46f21480 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 16 color 2130503744 key 1 - Init COMPLETE
+gh007:2125088:2125730 [1] NCCL INFO Init timings - ncclCommSplit: rank 1 nranks 2 total 0.03 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.01, rest 0.00)
+gh007:2125087:2125727 [0] NCCL INFO ncclCommSplit comm 0x495655c0 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 16 color 2130503744 key 0 - Init COMPLETE
+gh007:2125087:2125727 [0] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 2 total 0.04 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.01, rest 0.02)
+gh007:2125088:2125088 [1] NCCL INFO Rank 1 has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator
+gh007:2125087:2125087 [0] NCCL INFO Comm config Blocking set to 1
+gh007:2125087:2125738 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125738 [0] NCCL INFO Using network IB
+gh007:2125087:2125738 [0] NCCL INFO ncclCommSplit comm 0x4966d1d0 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 17 color 59908776 key 0- Init START
+gh007:2125088:2125088 [1] NCCL INFO Comm config Blocking set to 1
+gh007:2125087:2125738 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125087:2125738 [0] NCCL INFO comm 0x4966d1d0 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 00/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 01/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 02/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 03/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 04/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 05/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 06/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 07/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 08/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 09/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 10/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 11/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 12/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 13/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 14/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 15/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 16/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 17/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 18/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 19/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 20/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 21/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 22/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 23/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 24/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 25/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 26/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 27/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 28/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 29/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 30/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 31/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 32/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 33/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 34/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 35/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 36/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 37/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 38/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 39/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 40/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 41/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 42/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 43/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 44/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 45/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 46/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 47/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 48/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 49/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 50/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 51/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 52/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 53/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 54/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 55/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 56/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 57/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 58/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 59/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 60/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 61/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 62/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Channel 63/64 : 0
+gh007:2125087:2125738 [0] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125087:2125738 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125738 [0] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125087:2125742 [0] NCCL INFO [Proxy Service] Device 0 CPU core 20
+gh007:2125087:2125743 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 13
+gh007:2125087:2125738 [0] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125087:2125738 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125087:2125738 [0] NCCL INFO ncclCommSplit comm 0x4966d1d0 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 17 color 59908776 key 0 - Init COMPLETE
+gh007:2125087:2125738 [0] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.03 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.02, rest 0.00)
+gh007:2125087:2125087 [0] NCCL INFO Rank 0 has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator
+gh007:2125088:2125741 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125741 [1] NCCL INFO Using network IB
+gh007:2125087:2125087 [0] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125741 [1] NCCL INFO ncclCommSplit comm 0x47029090 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 18 color 440515407 key 0- Init START
+gh007:2125088:2125741 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125088:2125741 [1] NCCL INFO comm 0x47029090 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 00/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 01/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 02/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 03/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 04/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 05/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 06/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 07/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 08/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 09/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 10/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 11/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 12/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 13/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 14/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 15/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 16/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 17/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 18/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 19/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 20/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 21/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 22/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 23/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 24/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 25/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 26/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 27/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 28/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 29/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 30/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 31/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 32/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 33/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 34/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 35/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 36/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 37/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 38/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 39/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 40/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 41/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 42/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 43/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 44/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 45/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 46/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 47/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 48/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 49/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 50/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 51/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 52/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 53/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 54/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 55/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 56/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 57/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 58/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 59/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 60/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 61/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 62/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Channel 63/64 : 0
+gh007:2125088:2125741 [1] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125088:2125741 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125088:2125741 [1] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125088:2125749 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125088:2125748 [1] NCCL INFO [Proxy Service] Device 1 CPU core 58
+gh007:2125088:2125741 [1] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125088:2125741 [1] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125088:2125741 [1] NCCL INFO ncclCommSplit comm 0x47029090 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 18 color 440515407 key 0 - Init COMPLETE
+gh007:2125088:2125741 [1] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.07 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.02, rest 0.03)
+gh007:2125088:2125088 [1] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125752 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125747 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125752 [1] NCCL INFO Using network IB
+gh007:2125087:2125747 [0] NCCL INFO Using network IB
+gh007:2125088:2125752 [1] NCCL INFO ncclCommSplit comm 0x47130ca0 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 19 color 2130503744 key 1- Init START
+gh007:2125087:2125747 [0] NCCL INFO ncclCommSplit comm 0x49774de0 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 19 color 2130503744 key 0- Init START
+gh007:2125087:2125747 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125088:2125752 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125087:2125747 [0] NCCL INFO comm 0x49774de0 rank 0 nRanks 2 nNodes 1 localRanks 2 localRank 0 MNNVL 0
+gh007:2125088:2125752 [1] NCCL INFO comm 0x47130ca0 rank 1 nRanks 2 nNodes 1 localRanks 2 localRank 1 MNNVL 0
+gh007:2125087:2125747 [0] NCCL INFO Channel 00/08 : 0 1
+gh007:2125087:2125747 [0] NCCL INFO Channel 01/08 : 0 1
+gh007:2125087:2125747 [0] NCCL INFO Channel 02/08 : 0 1
+gh007:2125087:2125747 [0] NCCL INFO Channel 03/08 : 0 1
+gh007:2125087:2125747 [0] NCCL INFO Channel 04/08 : 0 1
+gh007:2125087:2125747 [0] NCCL INFO Channel 05/08 : 0 1
+gh007:2125088:2125752 [1] NCCL INFO Trees [0] -1/-1/-1->1->0 [1] -1/-1/-1->1->0 [2] 0/-1/-1->1->-1 [3] 0/-1/-1->1->-1 [4] -1/-1/-1->1->0 [5] -1/-1/-1->1->0 [6] 0/-1/-1->1->-1 [7] 0/-1/-1->1->-1
+gh007:2125087:2125747 [0] NCCL INFO Channel 06/08 : 0 1
+gh007:2125088:2125752 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125747 [0] NCCL INFO Channel 07/08 : 0 1
+gh007:2125087:2125747 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 1/-1/-1->0->-1 [2] -1/-1/-1->0->1 [3] -1/-1/-1->0->1 [4] 1/-1/-1->0->-1 [5] 1/-1/-1->0->-1 [6] -1/-1/-1->0->1 [7] -1/-1/-1->0->1
+gh007:2125087:2125747 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125747 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0
+gh007:2125087:2125754 [0] NCCL INFO [Proxy Service] Device 0 CPU core 26
+gh007:2125088:2125755 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125087:2125756 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 22
+gh007:2125088:2125753 [1] NCCL INFO [Proxy Service] Device 1 CPU core 58
+gh007:2125087:2125747 [0] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125087:2125747 [0] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125088:2125752 [1] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125088:2125752 [1] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125087:2125747 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125087:2125747 [0] NCCL INFO ncclCommSplit comm 0x49774de0 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 19 color 2130503744 key 0 - Init COMPLETE
+gh007:2125087:2125747 [0] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 2 total 0.06 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.01, rest 0.04)
+gh007:2125088:2125752 [1] NCCL INFO ncclCommSplit comm 0x47130ca0 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 19 color 2130503744 key 1 - Init COMPLETE
+gh007:2125088:2125752 [1] NCCL INFO Init timings - ncclCommSplit: rank 1 nranks 2 total 0.03 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.01, rest 0.00)
+[11-10 18:22:11] Found nccl from library libnccl.so.2
+[11-10 18:22:11] sglang-diffusion is using nccl==2.27.5
+gh007:2125087:2125087 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125087 [0] NCCL INFO Using network IB
+gh007:2125088:2125088 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125088 [1] NCCL INFO Using network IB
+gh007:2125087:2125087 [0] NCCL INFO ncclCommInitRank comm 0x4987c9f0 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 commId 0xded12edffeb20958 - Init START
+gh007:2125088:2125088 [1] NCCL INFO ncclCommInitRank comm 0x472388b0 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 commId 0xded12edffeb20958 - Init START
+gh007:2125087:2125087 [0] NCCL INFO Bootstrap timings total 0.000675 (create 0.000030, send 0.000130, recv 0.000330, ring 0.000023, delay 0.000000)
+gh007:2125088:2125088 [1] NCCL INFO Bootstrap timings total 0.000659 (create 0.000030, send 0.000115, recv 0.000214, ring 0.000025, delay 0.000000)
+gh007:2125087:2125087 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125088:2125088 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125087:2125087 [0] NCCL INFO comm 0x4987c9f0 rank 0 nRanks 2 nNodes 1 localRanks 2 localRank 0 MNNVL 0
+gh007:2125088:2125088 [1] NCCL INFO comm 0x472388b0 rank 1 nRanks 2 nNodes 1 localRanks 2 localRank 1 MNNVL 0
+gh007:2125087:2125087 [0] NCCL INFO Channel 00/08 : 0 1
+gh007:2125087:2125087 [0] NCCL INFO Channel 01/08 : 0 1
+gh007:2125087:2125087 [0] NCCL INFO Channel 02/08 : 0 1
+gh007:2125087:2125087 [0] NCCL INFO Channel 03/08 : 0 1
+gh007:2125088:2125088 [1] NCCL INFO Trees [0] -1/-1/-1->1->0 [1] -1/-1/-1->1->0 [2] 0/-1/-1->1->-1 [3] 0/-1/-1->1->-1 [4] -1/-1/-1->1->0 [5] -1/-1/-1->1->0 [6] 0/-1/-1->1->-1 [7] 0/-1/-1->1->-1
+gh007:2125087:2125087 [0] NCCL INFO Channel 04/08 : 0 1
+gh007:2125088:2125088 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125087 [0] NCCL INFO Channel 05/08 : 0 1
+gh007:2125087:2125087 [0] NCCL INFO Channel 06/08 : 0 1
+gh007:2125087:2125087 [0] NCCL INFO Channel 07/08 : 0 1
+gh007:2125087:2125087 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 1/-1/-1->0->-1 [2] -1/-1/-1->0->1 [3] -1/-1/-1->0->1 [4] 1/-1/-1->0->-1 [5] 1/-1/-1->0->-1 [6] -1/-1/-1->0->1 [7] -1/-1/-1->0->1
+gh007:2125087:2125087 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125087 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0
+gh007:2125087:2125764 [0] NCCL INFO [Proxy Service] Device 0 CPU core 17
+gh007:2125087:2125766 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 26
+gh007:2125088:2125767 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125088:2125765 [1] NCCL INFO [Proxy Service] Device 1 CPU core 55
+gh007:2125088:2125088 [1] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125088:2125088 [1] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125087:2125087 [0] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125087:2125087 [0] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125087:2125087 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125088:2125088 [1] NCCL INFO ncclCommInitRank comm 0x472388b0 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 commId 0xded12edffeb20958 - Init COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO Init timings - ncclCommInitRank: rank 1 nranks 2 total 0.03 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.00, rest 0.00)
+gh007:2125087:2125087 [0] NCCL INFO ncclCommInitRank comm 0x4987c9f0 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 commId 0xded12edffeb20958 - Init COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO Init timings - ncclCommInitRank: rank 0 nranks 2 total 0.03 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.00, rest 0.00)
+gh007:2125087:2125769 [0] NCCL INFO Channel 00/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2125769 [0] NCCL INFO Channel 01/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2125769 [0] NCCL INFO Channel 02/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2125769 [0] NCCL INFO Channel 03/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2125768 [1] NCCL INFO Channel 00/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2125769 [0] NCCL INFO Channel 04/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2125768 [1] NCCL INFO Channel 01/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2125769 [0] NCCL INFO Channel 05/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2125768 [1] NCCL INFO Channel 02/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2125769 [0] NCCL INFO Channel 06/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2125768 [1] NCCL INFO Channel 03/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2125769 [0] NCCL INFO Channel 07/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2125768 [1] NCCL INFO Channel 04/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2125768 [1] NCCL INFO Channel 05/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2125768 [1] NCCL INFO Channel 06/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2125768 [1] NCCL INFO Channel 07/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2125769 [0] NCCL INFO Connected all rings, use ring PXN 0 GDR 1
+gh007:2125088:2125768 [1] NCCL INFO Connected all rings, use ring PXN 0 GDR 1
+gh007:2125088:2125088 [1] NCCL INFO Rank 1 has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator
+gh007:2125087:2125087 [0] NCCL INFO Comm config Blocking set to 1
+gh007:2125087:2125773 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125773 [0] NCCL INFO Using network IB
+gh007:2125087:2125773 [0] NCCL INFO ncclCommSplit comm 0x49ae69e0 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 20 color 59908776 key 0- Init START
+gh007:2125087:2125773 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125087:2125773 [0] NCCL INFO comm 0x49ae69e0 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 00/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 01/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 02/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 03/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 04/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 05/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 06/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 07/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 08/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 09/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 10/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 11/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 12/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 13/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 14/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 15/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 16/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 17/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 18/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 19/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 20/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 21/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 22/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 23/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 24/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 25/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 26/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 27/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 28/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 29/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 30/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 31/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 32/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 33/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 34/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 35/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 36/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 37/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 38/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 39/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 40/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 41/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 42/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 43/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 44/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 45/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 46/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 47/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 48/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 49/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 50/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 51/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 52/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 53/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 54/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 55/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 56/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 57/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 58/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 59/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 60/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 61/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 62/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Channel 63/64 : 0
+gh007:2125087:2125773 [0] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125087:2125773 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125773 [0] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125087:2125775 [0] NCCL INFO [Proxy Service] Device 0 CPU core 17
+gh007:2125087:2125776 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 26
+gh007:2125087:2125773 [0] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125087:2125773 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125087:2125773 [0] NCCL INFO ncclCommSplit comm 0x49ae69e0 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 20 color 59908776 key 0 - Init COMPLETE
+gh007:2125087:2125773 [0] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.04 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.02, rest 0.00)
+gh007:2125087:2125087 [0] NCCL INFO Rank 0 has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator
+gh007:2125088:2125088 [1] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125784 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125784 [1] NCCL INFO Using network IB
+gh007:2125088:2125784 [1] NCCL INFO ncclCommSplit comm 0x474a1920 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 22 color 440515407 key 0- Init START
+gh007:2125087:2125087 [0] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125784 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125088:2125784 [1] NCCL INFO comm 0x474a1920 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 00/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 01/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 02/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 03/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 04/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 05/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 06/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 07/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 08/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 09/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 10/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 11/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 12/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 13/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 14/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 15/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 16/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 17/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 18/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 19/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 20/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 21/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 22/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 23/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 24/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 25/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 26/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 27/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 28/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 29/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 30/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 31/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 32/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 33/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 34/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 35/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 36/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 37/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 38/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 39/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 40/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 41/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 42/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 43/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 44/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 45/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 46/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 47/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 48/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 49/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 50/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 51/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 52/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 53/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 54/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 55/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 56/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 57/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 58/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 59/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 60/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 61/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 62/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Channel 63/64 : 0
+gh007:2125088:2125784 [1] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125088:2125784 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125088:2125784 [1] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125088:2125789 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125088:2125788 [1] NCCL INFO [Proxy Service] Device 1 CPU core 55
+gh007:2125088:2125784 [1] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125088:2125784 [1] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125088:2125784 [1] NCCL INFO ncclCommSplit comm 0x474a1920 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 22 color 440515407 key 0 - Init COMPLETE
+gh007:2125088:2125784 [1] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.04 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.02, rest 0.00)
+gh007:2125088:2125088 [1] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125795 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125787 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125795 [1] NCCL INFO Using network IB
+gh007:2125087:2125787 [0] NCCL INFO Using network IB
+gh007:2125087:2125787 [0] NCCL INFO ncclCommSplit comm 0x49bf2460 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 23 color 2130503744 key 0- Init START
+gh007:2125088:2125795 [1] NCCL INFO ncclCommSplit comm 0x475acf70 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 23 color 2130503744 key 1- Init START
+gh007:2125087:2125787 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125088:2125795 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125087:2125787 [0] NCCL INFO comm 0x49bf2460 rank 0 nRanks 2 nNodes 1 localRanks 2 localRank 0 MNNVL 0
+gh007:2125088:2125795 [1] NCCL INFO comm 0x475acf70 rank 1 nRanks 2 nNodes 1 localRanks 2 localRank 1 MNNVL 0
+gh007:2125087:2125787 [0] NCCL INFO Channel 00/08 : 0 1
+gh007:2125087:2125787 [0] NCCL INFO Channel 01/08 : 0 1
+gh007:2125087:2125787 [0] NCCL INFO Channel 02/08 : 0 1
+gh007:2125088:2125795 [1] NCCL INFO Trees [0] -1/-1/-1->1->0 [1] -1/-1/-1->1->0 [2] 0/-1/-1->1->-1 [3] 0/-1/-1->1->-1 [4] -1/-1/-1->1->0 [5] -1/-1/-1->1->0 [6] 0/-1/-1->1->-1 [7] 0/-1/-1->1->-1
+gh007:2125087:2125787 [0] NCCL INFO Channel 03/08 : 0 1
+gh007:2125088:2125795 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125787 [0] NCCL INFO Channel 04/08 : 0 1
+gh007:2125087:2125787 [0] NCCL INFO Channel 05/08 : 0 1
+gh007:2125087:2125787 [0] NCCL INFO Channel 06/08 : 0 1
+gh007:2125087:2125787 [0] NCCL INFO Channel 07/08 : 0 1
+gh007:2125087:2125787 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 1/-1/-1->0->-1 [2] -1/-1/-1->0->1 [3] -1/-1/-1->0->1 [4] 1/-1/-1->0->-1 [5] 1/-1/-1->0->-1 [6] -1/-1/-1->0->1 [7] -1/-1/-1->0->1
+gh007:2125087:2125787 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125787 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0
+gh007:2125087:2125797 [0] NCCL INFO [Proxy Service] Device 0 CPU core 12
+gh007:2125088:2125798 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125087:2125799 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 20
+gh007:2125088:2125796 [1] NCCL INFO [Proxy Service] Device 1 CPU core 55
+gh007:2125088:2125795 [1] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125088:2125795 [1] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125087:2125787 [0] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125087:2125787 [0] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125087:2125787 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125088:2125795 [1] NCCL INFO ncclCommSplit comm 0x475acf70 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 23 color 2130503744 key 1 - Init COMPLETE
+gh007:2125087:2125787 [0] NCCL INFO ncclCommSplit comm 0x49bf2460 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 23 color 2130503744 key 0 - Init COMPLETE
+gh007:2125088:2125795 [1] NCCL INFO Init timings - ncclCommSplit: rank 1 nranks 2 total 0.03 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.00, rest 0.00)
+gh007:2125087:2125787 [0] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 2 total 0.07 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.00, rest 0.04)
+[11-10 18:22:12] No pipeline_class_name specified, using model_index.json
+Loading required modules:   0%|          | 0/5 [00:00<?, ?it/s][11-10 18:22:12] [RunAI Streamer] Rank 1: CPU ring 7 x 2.0 GiB = 13.7 GiB for 10.6 GiB in 3 file(s)
+[11-10 18:22:12] Diffusers version: 0.35.0.dev0
+[11-10 18:22:12] Using native sglang backend for model '/scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers'
+[11-10 18:22:12] Found model info: ModelInfo(pipeline_cls=<class 'sglang.multimodal_gen.runtime.pipelines.wan_pipeline.WanPipeline'>, sampling_param_cls=<class 'sglang.multimodal_gen.configs.sample.wan.Wan2_2_TI2V_5B_SamplingParam'>, pipeline_config_cls=<class 'sglang.multimodal_gen.configs.pipeline_configs.wan.Wan2_2_TI2V_5B_Config'>)
+[11-10 18:22:12] Using pipeline from model_index.json: WanPipeline
+[11-10 18:22:12] Loading pipeline modules...
+[11-10 18:22:13] Model already exists locally and is complete
+[11-10 18:22:13] Model path: /scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers
+[11-10 18:22:13] Diffusers version: 0.35.0.dev0
+[11-10 18:22:13] Loading pipeline modules from config: {'_class_name': 'WanPipeline', '_diffusers_version': '0.35.0.dev0', 'boundary_ratio': None, 'expand_timesteps': True, 'scheduler': ['diffusers', 'UniPCMultistepScheduler'], 'text_encoder': ['transformers', 'UMT5EncoderModel'], 'tokenizer': ['transformers', 'T5TokenizerFast'], 'transformer': ['diffusers', 'WanTransformer3DModel'], 'transformer_2': [None, None], 'vae': ['diffusers', 'AutoencoderKLWan']}
+[11-10 18:22:13] Loading required components: ['text_encoder', 'tokenizer', 'vae', 'transformer', 'scheduler']
+Loading required modules:   0%|          | 0/5 [00:00<?, ?it/s][11-10 18:22:13] Loading text_encoder from /scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers/text_encoder. avail mem: 75.00 GB
+[11-10 18:22:13] [RunAI Streamer] Rank 0: CPU ring 7 x 2.0 GiB = 13.7 GiB for 10.6 GiB in 3 file(s)
+[11-10 18:22:20] [RunAI Streamer] Overall time to stream 10.6 GiB of all files to cpu: 7.83s, 1.4 GiB/s
+gh007:2125088:2125088 [1] NCCL INFO Comm config Blocking set to 1
+[11-10 18:22:21] [RunAI Streamer] Overall time to stream 10.6 GiB of all files to cpu: 7.96s, 1.3 GiB/s
+gh007:2125087:2125087 [0] NCCL INFO Comm config Blocking set to 1
+gh007:2125087:2125938 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125938 [0] NCCL INFO Using network IB
+gh007:2125088:2125896 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125896 [1] NCCL INFO Using network IB
+gh007:2125087:2125938 [0] NCCL INFO ncclCommSplit comm 0x49f29200 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 24 color 506952122 key 0- Init START
+gh007:2125088:2125896 [1] NCCL INFO ncclCommSplit comm 0x4793b580 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 24 color 506952123 key 0- Init START
+gh007:2125087:2125938 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125087:2125938 [0] NCCL INFO comm 0x49f29200 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 00/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 01/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 02/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 03/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 04/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 05/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 06/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 07/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 08/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 09/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 10/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 11/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 12/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 13/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 14/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 15/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 16/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 17/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 18/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 19/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 20/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 21/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 22/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 23/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 24/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 25/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 26/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 27/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 28/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 29/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 30/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 31/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 32/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 33/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 34/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 35/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 36/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 37/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 38/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 39/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 40/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 41/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 42/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 43/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 44/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 45/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 46/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 47/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 48/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 49/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 50/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 51/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 52/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 53/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 54/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 55/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 56/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 57/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 58/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 59/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 60/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 61/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 62/64 : 0
+gh007:2125087:2125938 [0] NCCL INFO Channel 63/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125087:2125938 [0] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125087:2125938 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125938 [0] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125087:2125939 [0] NCCL INFO [Proxy Service] Device 0 CPU core 10
+gh007:2125087:2125940 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 23
+gh007:2125088:2125896 [1] NCCL INFO comm 0x4793b580 rank 0 nRanks 1 nNodes 1 localRanks 1 localRank 0 MNNVL 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 00/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 01/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 02/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 03/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 04/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 05/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 06/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 07/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 08/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 09/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 10/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 11/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 12/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 13/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 14/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 15/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 16/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 17/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 18/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 19/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 20/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 21/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 22/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 23/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 24/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 25/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 26/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 27/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 28/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 29/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 30/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 31/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 32/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 33/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 34/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 35/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 36/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 37/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 38/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 39/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 40/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 41/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 42/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 43/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 44/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 45/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 46/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 47/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 48/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 49/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 50/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 51/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 52/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 53/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 54/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 55/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 56/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 57/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 58/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 59/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 60/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 61/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 62/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Channel 63/64 : 0
+gh007:2125088:2125896 [1] NCCL INFO Trees [0] -1/-1/-1->0->-1 [1] -1/-1/-1->0->-1 [2] -1/-1/-1->0->-1 [3] -1/-1/-1->0->-1 [4] -1/-1/-1->0->-1 [5] -1/-1/-1->0->-1 [6] -1/-1/-1->0->-1 [7] -1/-1/-1->0->-1 [8] -1/-1/-1->0->-1 [9] -1/-1/-1->0->-1 [10] -1/-1/-1->0->-1 [11] -1/-1/-1->0->-1 [12] -1/-1/-1->0->-1 [13] -1/-1/-1->0->-1 [14] -1/-1/-1->0->-1 [15] -1/-1/-1->0->-1 [16] -1/-1/-1->0->-1 [17] -1/-1/-1->0->-1 [18] -1/-1/-1->0->-1 [19] -1/-1/-1->0->-1 [20] -1/-1/-1->0->-1 [21] -1/-1/-1->0->-1 [22] -1/-1/-1->0->-1 [23] -1/-1/-1->0->-1 [24] -1/-1/-1->0->-1 [25] -1/-1/-1->0->-1 [26] -1/-1/-1->0->-1 [27] -1/-1/-1->0->-1 [28] -1/-1/-1->0->-1 [29] -1/-1/-1->0->-1 [30] -1/-1/-1->0->-1 [31] -1/-1/-1->0->-1 [32] -1/-1/-1->0->-1 [33] -1/-1/-1->0->-1 [34] -1/-1/-1->0->-1 [35] -1/-1/-1->0->-1 [36] -1/-1/-1->0->-1 [37] -1/-1/-1->0->-1 [38] -1/-1/-1->0->-1 [39] -1/-1/-1->0->-1 [40] -1/-1/-1->0->-1 [41] -1/-1/-1->0->-1 [42] -1/-1/-1->0->-1 [43] -1/-1/-1->0->-1 [44] -1/-1/-1->0->-1 [45] -1/-1/-1->0->-1 [46] -1/-1/-1->0->-1 [47]
+gh007:2125088:2125896 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125088:2125896 [1] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+gh007:2125088:2125942 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 53
+gh007:2125088:2125941 [1] NCCL INFO [Proxy Service] Device 1 CPU core 55
+gh007:2125087:2125938 [0] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125087:2125938 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125088:2125896 [1] NCCL INFO 64 coll channels, 64 collnet channels, 0 nvls channels, 64 p2p channels, 64 p2p channels per peer
+gh007:2125088:2125896 [1] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125087:2125938 [0] NCCL INFO ncclCommSplit comm 0x49f29200 rank 0 nranks 1 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 24 color 506952122 key 0 - Init COMPLETE
+gh007:2125087:2125938 [0] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.05 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.01, graphs 0.00, connections 0.03, rest 0.00)
+gh007:2125088:2125896 [1] NCCL INFO ncclCommSplit comm 0x4793b580 rank 0 nranks 1 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 24 color 506952123 key 0 - Init COMPLETE
+gh007:2125088:2125896 [1] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 1 total 0.48 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.03, rest 0.43)
+gh007:2125087:2125087 [0] NCCL INFO Comm config Blocking set to 1
+gh007:2125088:2125088 [1] NCCL INFO Comm config Blocking set to 1
+gh007:2125087:2125945 [0] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125088:2125947 [1] NCCL INFO Assigned NET plugin IB to comm
+gh007:2125087:2125945 [0] NCCL INFO Using network IB
+gh007:2125088:2125947 [1] NCCL INFO Using network IB
+gh007:2125088:2125947 [1] NCCL INFO ncclCommSplit comm 0x47a46e40 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 25 color 1301594146 key 1- Init START
+gh007:2125087:2125945 [0] NCCL INFO ncclCommSplit comm 0x4a030e10 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 25 color 1301594146 key 0- Init START
+gh007:2125087:2125945 [0] NCCL INFO Setting affinity for GPU 0 to 8-27
+gh007:2125088:2125947 [1] NCCL INFO Setting affinity for GPU 1 to 52-63
+gh007:2125087:2125945 [0] NCCL INFO comm 0x4a030e10 rank 0 nRanks 2 nNodes 1 localRanks 2 localRank 0 MNNVL 0
+gh007:2125088:2125947 [1] NCCL INFO comm 0x47a46e40 rank 1 nRanks 2 nNodes 1 localRanks 2 localRank 1 MNNVL 0
+gh007:2125087:2125945 [0] NCCL INFO Channel 00/08 : 0 1
+gh007:2125087:2125945 [0] NCCL INFO Channel 01/08 : 0 1
+gh007:2125087:2125945 [0] NCCL INFO Channel 02/08 : 0 1
+gh007:2125088:2125947 [1] NCCL INFO Trees [0] -1/-1/-1->1->0 [1] -1/-1/-1->1->0 [2] 0/-1/-1->1->-1 [3] 0/-1/-1->1->-1 [4] -1/-1/-1->1->0 [5] -1/-1/-1->1->0 [6] 0/-1/-1->1->-1 [7] 0/-1/-1->1->-1
+gh007:2125087:2125945 [0] NCCL INFO Channel 03/08 : 0 1
+gh007:2125088:2125947 [1] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125945 [0] NCCL INFO Channel 04/08 : 0 1
+gh007:2125087:2125945 [0] NCCL INFO Channel 05/08 : 0 1
+gh007:2125087:2125945 [0] NCCL INFO Channel 06/08 : 0 1
+gh007:2125087:2125945 [0] NCCL INFO Channel 07/08 : 0 1
+gh007:2125087:2125945 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 1/-1/-1->0->-1 [2] -1/-1/-1->0->1 [3] -1/-1/-1->0->1 [4] 1/-1/-1->0->-1 [5] 1/-1/-1->0->-1 [6] -1/-1/-1->0->1 [7] -1/-1/-1->0->1
+gh007:2125087:2125945 [0] NCCL INFO P2P Chunksize set to 524288
+gh007:2125087:2125945 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0
+gh007:2125088:2125951 [1] NCCL INFO [Proxy Service UDS] Device 1 CPU core 52
+gh007:2125087:2125950 [0] NCCL INFO [Proxy Service] Device 0 CPU core 18
+gh007:2125088:2125949 [1] NCCL INFO [Proxy Service] Device 1 CPU core 54
+gh007:2125087:2125952 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 14
+gh007:2125088:2125947 [1] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125088:2125947 [1] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125087:2125945 [0] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+gh007:2125087:2125945 [0] NCCL INFO 8 coll channels, 8 collnet channels, 0 nvls channels, 8 p2p channels, 8 p2p channels per peer
+gh007:2125087:2125945 [0] NCCL INFO CC Off, workFifoBytes 1048576
+gh007:2125088:2125947 [1] NCCL INFO ncclCommSplit comm 0x47a46e40 rank 1 nranks 2 cudaDev 1 nvmlDev 1 busId c6000 parent 0x4565ffd0 splitCount 25 color 1301594146 key 1 - Init COMPLETE
+gh007:2125088:2125947 [1] NCCL INFO Init timings - ncclCommSplit: rank 1 nranks 2 total 0.03 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.01, rest 0.00)
+gh007:2125087:2125945 [0] NCCL INFO ncclCommSplit comm 0x4a030e10 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 26000 parent 0x47ca5bc0 splitCount 25 color 1301594146 key 0 - Init COMPLETE
+gh007:2125087:2125945 [0] NCCL INFO Init timings - ncclCommSplit: rank 0 nranks 2 total 0.03 (kernels 0.00, alloc 0.00, bootstrap 0.00, allgathers 0.00, topo 0.02, graphs 0.00, connections 0.01, rest 0.00)
+[11-10 18:23:04] Loaded text_encoder: FSDPUMT5EncoderModel (sgl-diffusion version). consumed: 0.49 GB, avail mem: 74.51 GB
+Loading required modules:  20%|██        | 1/5 [00:51<03:24, 51.18s/it][11-10 18:23:04] Loading tokenizer from /scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers/tokenizer. avail mem: 74.51 GB
+Loading required modules:  20%|██        | 1/5 [00:52<03:28, 52.23s/it][11-10 18:23:05] Loaded tokenizer: T5TokenizerFast (sgl-diffusion version). consumed: 0.00 GB, avail mem: 74.51 GB
+Loading required modules:  40%|████      | 2/5 [00:52<01:04, 21.60s/it][11-10 18:23:05] Loading vae from /scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers/vae. avail mem: 74.51 GB
+Loading required modules:  40%|████      | 2/5 [00:52<01:05, 21.87s/it][11-10 18:23:08] Loaded vae: AutoencoderKLWan (sgl-diffusion version). consumed: 0.00 GB, avail mem: 74.51 GB
+Loading required modules:  60%|██████    | 3/5 [00:55<00:26, 13.29s/it][11-10 18:23:08] Loading transformer from /scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers/transformer. avail mem: 74.51 GB
+Loading required modules:  60%|██████    | 3/5 [00:56<00:26, 13.36s/it][11-10 18:23:08] Loading WanTransformer3DModel from 5 safetensors files , param_dtype: torch.bfloat16
+[11-10 18:23:17] [RunAI Streamer] Rank 1: CPU ring 18 x 1.1 GiB = 19.4 GiB for 18.6 GiB in 5 file(s)
+[93m[11-10 18:23:17] flash_attn 3 package is not installed. It's recommended to install flash_attn3 on hopper, otherwise performance is sub-optimal[0;0m
+[11-10 18:23:17] Using FlashAttention (FA3 for hopper, FA4 for blackwell) backend
+[11-10 18:23:17] Using FlashAttention (FA3 for hopper, FA4 for blackwell) backend
+[11-10 18:23:18] [RunAI Streamer] Rank 0: CPU ring 18 x 1.1 GiB = 19.4 GiB for 18.6 GiB in 5 file(s)
+[11-10 18:24:45] [RunAI Streamer] Overall time to stream 18.6 GiB of all files to cpu: 88.1s, 216.5 MiB/s
+[11-10 18:24:45] [RunAI Streamer] Overall time to stream 18.6 GiB of all files to cpu: 87.62s, 217.7 MiB/s
+[11-10 18:24:57] Loaded model with 5.00B parameters
+[11-10 18:24:57] Loaded transformer: WanTransformer3DModel (sgl-diffusion version). consumed: 0.00 GB, avail mem: 74.51 GB
+Loading required modules:  80%|████████  | 4/5 [02:44<00:50, 50.90s/it][11-10 18:24:57] Loading scheduler from /scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers/scheduler. avail mem: 74.51 GB
+[11-10 18:24:57] Loaded scheduler: UniPCMultistepScheduler (sgl-diffusion version). consumed: 0.00 GB, avail mem: 74.51 GB
+Loading required modules: 100%|██████████| 5/5 [02:44<00:00, 32.82s/it]
+[11-10 18:24:57] Creating pipeline stages...
+[11-10 18:24:57] Compiling transformer with mode: max-autotune-no-cudagraphs
+[11-10 18:24:57] Using FlashAttention (FA3 for hopper, FA4 for blackwell) backend
+[11-10 18:24:57] Pipeline instantiated
+[11-10 18:24:57] Worker 0: Initialized device, model, and distributed environment.
+[11-10 18:24:57] Worker 0: Scheduler loop started.
+Loading required modules:  80%|████████  | 4/5 [02:44<00:51, 51.07s/it]Loading required modules: 100%|██████████| 5/5 [02:44<00:00, 33.00s/it]
+[11-10 18:24:57] Diffusers version: 0.35.0.dev0
+[11-10 18:24:57] Using native sglang backend for model '/scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers'
+[11-10 18:24:57] Found model info: ModelInfo(pipeline_cls=<class 'sglang.multimodal_gen.runtime.pipelines.wan_pipeline.WanPipeline'>, sampling_param_cls=<class 'sglang.multimodal_gen.configs.sample.wan.Wan2_2_TI2V_5B_SamplingParam'>, pipeline_config_cls=<class 'sglang.multimodal_gen.configs.pipeline_configs.wan.Wan2_2_TI2V_5B_Config'>)
+[11-10 18:24:57] Adjusting number of frames from 41 to 45 based on number of GPUs (2)
+[11-10 18:24:57] Processing prompt 1/1: A cat walks on the grass, realistic
+[11-10 18:24:57] Running pipeline stages: ['input_validation_stage', 'text_encoding_stage', 'latent_preparation_stage', 'timestep_preparation_stage', 'denoising_stage', 'decoding_stage']
+[11-10 18:24:57] [InputValidationStage] started...
+[11-10 18:24:57] [InputValidationStage] finished in 0.0001 seconds
+[11-10 18:24:57] [TextEncodingStage] started...
+[11-10 18:25:05] [TextEncodingStage] finished in 8.1297 seconds
+[11-10 18:25:05] [LatentPreparationStage] started...
+[11-10 18:25:05] [LatentPreparationStage] finished in 0.0196 seconds
+[11-10 18:25:05] [TimestepPreparationStage] started...
+[11-10 18:25:05] [TimestepPreparationStage] finished in 0.0003 seconds
+[11-10 18:25:05] [DenoisingStage] started...
+  0%|          | 0/10 [00:00<?, ?it/s]/scratch/yx2432/rebuttal_mn/sglang/.venv/lib/python3.12/site-packages/torch/_dynamo/variables/functions.py:1692: UserWarning: Dynamo detected a call to a `functools.lru_cache`-wrapped function. Dynamo ignores the cache wrapper and directly traces the wrapped function. Silent incorrectness is only a *potential* risk, not something we have observed. Enable TORCH_LOGS="+dynamo" for a DEBUG stack trace.
+  torch._dynamo.utils.warn_once(msg)
+/scratch/yx2432/rebuttal_mn/sglang/.venv/lib/python3.12/site-packages/torch/_dynamo/variables/functions.py:1692: UserWarning: Dynamo detected a call to a `functools.lru_cache`-wrapped function. Dynamo ignores the cache wrapper and directly traces the wrapped function. Silent incorrectness is only a *potential* risk, not something we have observed. Enable TORCH_LOGS="+dynamo" for a DEBUG stack trace.
+  torch._dynamo.utils.warn_once(msg)
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+Autotune Choices Stats:
+{"num_choices": 8, "num_triton_choices": 7, "best_kernel": "convolution", "best_time": 0.04931199923157692, "best_triton_pos": 1, "best_triton_time": 0.05363199859857559, "best_triton_kernel": "triton_convolution3d_3", "best_triton_kernel_desc": "ALLOW_TF32=True, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=2, num_warps=8"}
+Autotune Choices Stats:
+{"num_choices": 8, "num_triton_choices": 7, "best_kernel": "convolution", "best_time": 0.04956800118088722, "best_triton_pos": 1, "best_triton_time": 0.05423999950289726, "best_triton_kernel": "triton_convolution3d_3", "best_triton_kernel_desc": "ALLOW_TF32=True, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=2, num_warps=8"}
+AUTOTUNE convolution(1x48x6x44x80, 3072x48x1x2x2)
+strides: [1013760, 21120, 3520, 80, 1], [192, 4, 4, 2, 1]
+dtypes: torch.bfloat16, torch.bfloat16
+  convolution 0.0493 ms 100.0% 
+  triton_convolution3d_3 0.0536 ms 91.9% ALLOW_TF32=True, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=2, num_warps=8
+  triton_convolution3d_1 0.0568 ms 86.9% ALLOW_TF32=True, BLOCK_K=16, BLOCK_M=256, BLOCK_N=64, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=2, num_warps=4
+  triton_convolution3d_0 0.0584 ms 84.4% ALLOW_TF32=True, BLOCK_K=16, BLOCK_M=64, BLOCK_N=256, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=2, num_warps=4
+  triton_convolution3d_4 0.0749 ms 65.8% ALLOW_TF32=True, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=2, num_warps=4
+  triton_convolution3d_6 0.0767 ms 64.3% ALLOW_TF32=True, BLOCK_K=32, BLOCK_M=256, BLOCK_N=64, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=2, num_warps=8
+  triton_convolution3d_5 0.0822 ms 60.0% ALLOW_TF32=True, BLOCK_K=32, BLOCK_M=64, BLOCK_N=256, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=2, num_warps=8
+  triton_convolution3d_2 0.4006 ms 12.3% ALLOW_TF32=True, BLOCK_K=16, BLOCK_M=1024, BLOCK_N=16, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=1, num_warps=8
+SingleProcess AUTOTUNE benchmarking takes 0.2463 seconds and 0.6660 seconds precompiling for 8 choices
+AUTOTUNE convolution(1x48x6x44x80, 3072x48x1x2x2)
+strides: [1013760, 21120, 3520, 80, 1], [192, 4, 4, 2, 1]
+dtypes: torch.bfloat16, torch.bfloat16
+  convolution 0.0496 ms 100.0% 
+  triton_convolution3d_3 0.0542 ms 91.4% ALLOW_TF32=True, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=2, num_warps=8
+  triton_convolution3d_1 0.0574 ms 86.4% ALLOW_TF32=True, BLOCK_K=16, BLOCK_M=256, BLOCK_N=64, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=2, num_warps=4
+  triton_convolution3d_0 0.0589 ms 84.1% ALLOW_TF32=True, BLOCK_K=16, BLOCK_M=64, BLOCK_N=256, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=2, num_warps=4
+  triton_convolution3d_4 0.0757 ms 65.5% ALLOW_TF32=True, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=2, num_warps=4
+  triton_convolution3d_6 0.0771 ms 64.3% ALLOW_TF32=True, BLOCK_K=32, BLOCK_M=256, BLOCK_N=64, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=2, num_warps=8
+  triton_convolution3d_5 0.0827 ms 60.0% ALLOW_TF32=True, BLOCK_K=32, BLOCK_M=64, BLOCK_N=256, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=2, num_warps=8
+  triton_convolution3d_2 0.4029 ms 12.3% ALLOW_TF32=True, BLOCK_K=16, BLOCK_M=1024, BLOCK_N=16, GROUPS=1, KERNEL_D=1, KERNEL_H=2, KERNEL_W=2, PADDING_D=0, PADDING_H=0, PADDING_W=0, STRIDE_D=1, STRIDE_H=2, STRIDE_W=2, UNROLL=False, num_stages=1, num_warps=8
+SingleProcess AUTOTUNE benchmarking takes 0.2702 seconds and 0.6104 seconds precompiling for 8 choices
+final peak_memory=32440320
+final peak_memory=32440320
+final peak_memory=32440320
+final peak_memory=32440320
+final peak_memory=32440320
+final peak_memory=32440320
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=32440320
+final peak_memory=32440320
+final peak_memory=32440320
+final peak_memory=32440320
+final peak_memory=32440320
+final peak_memory=32440320
+/scratch/yx2432/rebuttal_mn/sglang/.venv/lib/python3.12/site-packages/torch/_dynamo/variables/functions.py:1598: UserWarning: Dynamo does not know how to trace the builtin `<unknown module>.datetime.now.` This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind).
+If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround.
+If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use `torch.compiler.allow_in_graph`.
+  torch._dynamo.utils.warn_once(explanation + "\n" + "\n".join(hints))
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+/scratch/yx2432/rebuttal_mn/sglang/.venv/lib/python3.12/site-packages/torch/_dynamo/variables/functions.py:1598: UserWarning: Dynamo does not know how to trace the builtin `<unknown module>.datetime.now.` This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind).
+If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround.
+If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use `torch.compiler.allow_in_graph`.
+  torch._dynamo.utils.warn_once(explanation + "\n" + "\n".join(hints))
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+/scratch/yx2432/rebuttal_mn/sglang/.venv/lib/python3.12/site-packages/torch/_dynamo/variables/functions.py:1598: UserWarning: Dynamo does not know how to trace the builtin `_thread.allocate_lock.` This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind).
+If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround.
+If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use `torch.compiler.allow_in_graph`.
+  torch._dynamo.utils.warn_once(explanation + "\n" + "\n".join(hints))
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+gh007:2125087:2130381 [0] NCCL INFO Channel 00/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2130381 [0] NCCL INFO Channel 01/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2130381 [0] NCCL INFO Channel 02/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2130381 [0] NCCL INFO Channel 03/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2130381 [0] NCCL INFO Channel 04/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2130381 [0] NCCL INFO Channel 05/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2130381 [0] NCCL INFO Channel 06/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2130381 [0] NCCL INFO Channel 07/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2130382 [1] NCCL INFO Channel 00/1 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2130382 [1] NCCL INFO Channel 01/1 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2130382 [1] NCCL INFO Channel 02/1 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2130382 [1] NCCL INFO Channel 03/1 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2130382 [1] NCCL INFO Channel 04/1 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2130382 [1] NCCL INFO Channel 05/1 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2130382 [1] NCCL INFO Channel 06/1 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2130382 [1] NCCL INFO Channel 07/1 : 1[1] -> 0[0] via P2P/CUMEM
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=32440324
+final peak_memory=32440324
+final peak_memory=32440324
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=32440324
+final peak_memory=32440324
+final peak_memory=32440324
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=4
+final peak_memory=4
+final peak_memory=4
+final peak_memory=4
+final peak_memory=4
+final peak_memory=4
+[rank1]:W1110 18:26:59.378000 2125088 torch/_dynamo/convert_frame.py:1358] [33/16] torch._dynamo hit config.recompile_limit (16)
+[rank1]:W1110 18:26:59.378000 2125088 torch/_dynamo/convert_frame.py:1358] [33/16]    function: 'torch_dynamo_resume_in_forward_at_503' (/scratch/yx2432/rebuttal_mn/sglang/python/sglang/multimodal_gen/runtime/models/dits/wanvideo.py:503)
+[rank1]:W1110 18:26:59.378000 2125088 torch/_dynamo/convert_frame.py:1358] [33/16]    last reason: 33/0: Cache line invalidated because L['mock_comm_fn'] got deallocated
+[rank1]:W1110 18:26:59.378000 2125088 torch/_dynamo/convert_frame.py:1358] [33/16] To log all recompilation reasons, use TORCH_LOGS="recompiles".
+[rank1]:W1110 18:26:59.378000 2125088 torch/_dynamo/convert_frame.py:1358] [33/16] To diagnose recompilation issues, see https://pytorch.org/docs/main/torch.compiler_troubleshooting.html
+[rank0]:W1110 18:26:59.464000 2125087 torch/_dynamo/convert_frame.py:1358] [36/16] torch._dynamo hit config.recompile_limit (16)
+[rank0]:W1110 18:26:59.464000 2125087 torch/_dynamo/convert_frame.py:1358] [36/16]    function: 'torch_dynamo_resume_in_forward_at_503' (/scratch/yx2432/rebuttal_mn/sglang/python/sglang/multimodal_gen/runtime/models/dits/wanvideo.py:503)
+[rank0]:W1110 18:26:59.464000 2125087 torch/_dynamo/convert_frame.py:1358] [36/16]    last reason: 36/0: Cache line invalidated because L['mock_comm_fn'] got deallocated
+[rank0]:W1110 18:26:59.464000 2125087 torch/_dynamo/convert_frame.py:1358] [36/16] To log all recompilation reasons, use TORCH_LOGS="recompiles".
+[rank0]:W1110 18:26:59.464000 2125087 torch/_dynamo/convert_frame.py:1358] [36/16] To diagnose recompilation issues, see https://pytorch.org/docs/main/torch.compiler_troubleshooting.html
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+final peak_memory=0
+ 10%|█         | 1/10 [01:54<17:08, 114.27s/it] 20%|██        | 2/10 [01:54<06:18, 47.28s/it]  30%|███       | 3/10 [01:55<03:01, 25.87s/it] 40%|████      | 4/10 [01:55<01:34, 15.81s/it] 50%|█████     | 5/10 [01:55<00:51, 10.24s/it] 60%|██████    | 6/10 [01:56<00:27,  6.89s/it] 70%|███████   | 7/10 [01:56<00:14,  4.76s/it] 80%|████████  | 8/10 [01:56<00:06,  3.37s/it] 90%|█████████ | 9/10 [01:57<00:02,  2.44s/it]100%|██████████| 10/10 [01:57<00:00,  1.80s/it]100%|██████████| 10/10 [01:57<00:00, 11.77s/it]
+[11-10 18:27:04] [DenoisingStage] average time per step: 11.7740 seconds
+gh007:2125087:2131836 [0] NCCL INFO Channel 00/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2131835 [1] NCCL INFO Channel 00/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2131836 [0] NCCL INFO Channel 01/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2131836 [0] NCCL INFO Channel 02/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2131835 [1] NCCL INFO Channel 01/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2131835 [1] NCCL INFO Channel 02/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2131836 [0] NCCL INFO Channel 03/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2131836 [0] NCCL INFO Channel 04/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2131835 [1] NCCL INFO Channel 03/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2131835 [1] NCCL INFO Channel 04/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2131836 [0] NCCL INFO Channel 05/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2131836 [0] NCCL INFO Channel 06/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2131835 [1] NCCL INFO Channel 05/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2131836 [0] NCCL INFO Channel 07/0 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2131835 [1] NCCL INFO Channel 06/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2131835 [1] NCCL INFO Channel 07/0 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2131836 [0] NCCL INFO Connected all rings, use ring PXN 0 GDR 1
+gh007:2125088:2131835 [1] NCCL INFO Connected all rings, use ring PXN 0 GDR 1
+[11-10 18:27:04] [DenoisingStage] finished in 118.2618 seconds
+[11-10 18:27:04] [DecodingStage] started...
+gh007:2125087:2132314 [0] NCCL INFO Channel 00/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2132314 [0] NCCL INFO Channel 01/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2132314 [0] NCCL INFO Channel 02/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2132314 [0] NCCL INFO Channel 03/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125087:2132314 [0] NCCL INFO Channel 04/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2132313 [1] NCCL INFO Channel 00/1 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2132314 [0] NCCL INFO Channel 05/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2132313 [1] NCCL INFO Channel 01/1 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2132314 [0] NCCL INFO Channel 06/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2132313 [1] NCCL INFO Channel 02/1 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125087:2132314 [0] NCCL INFO Channel 07/1 : 0[0] -> 1[1] via P2P/CUMEM
+gh007:2125088:2132313 [1] NCCL INFO Channel 03/1 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2132313 [1] NCCL INFO Channel 04/1 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2132313 [1] NCCL INFO Channel 05/1 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2132313 [1] NCCL INFO Channel 06/1 : 1[1] -> 0[0] via P2P/CUMEM
+gh007:2125088:2132313 [1] NCCL INFO Channel 07/1 : 1[1] -> 0[0] via P2P/CUMEM
+[11-10 18:27:10] [DecodingStage] finished in 6.5875 seconds
+[11-10 18:27:10] Peak GPU memory: 27.05 GB, Peak allocated: 23.03 GB, Memory pool overhead: 4.03 GB (14.9%), Remaining GPU memory at peak: 52.59 GB. Components that could stay resident (based on the last request workload): ['text_encoder', 'vae', 'transformer']. Related offload server args to disable: --dit-cpu-offload, --text-encoder-cpu-offload, --vae-cpu-offload
+[11-10 18:27:13] Pixel data generated successfully in [92m135.81[0;0m seconds
+[11-10 18:27:13] Completed batch processing. Generated 1 outputs in [92m135.81[0;0m seconds
+[11-10 18:27:13] Memory usage - Max peak: 27704.00 MB, Avg peak: 27704.00 MB
+[11-10 18:27:13] Metrics dumped to: [1;36m/scratch/yx2432/rebuttal_mn/results/wan_c41_mn2_h100/profiles/perf_no.json[0;0m
+[93m[11-10 18:27:13] Generator was garbage collected without being shut down. Attempting to shut down the local server and client.[0;0m
+gh007:2125087:2125087 [0] NCCL INFO comm 0x49038cb0 rank 0 nranks 1 cudaDev 0 busId 26000 - Destroy COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO comm 0x469f54f0 rank 0 nranks 1 cudaDev 1 busId c6000 - Destroy COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO comm 0x4a030e10 rank 0 nranks 2 cudaDev 0 busId 26000 - Destroy COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO comm 0x468ea440 rank 0 nranks 1 cudaDev 1 busId c6000 - Destroy COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO comm 0x49f29200 rank 0 nranks 1 cudaDev 0 busId 26000 - Destroy COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO comm 0x47a46e40 rank 1 nranks 2 cudaDev 1 busId c6000 - Destroy COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO comm 0x49bf2460 rank 0 nranks 2 cudaDev 0 busId 26000 - Destroy COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO comm 0x4793b580 rank 0 nranks 1 cudaDev 1 busId c6000 - Destroy COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO comm 0x48f2d900 rank 0 nranks 1 cudaDev 0 busId 26000 - Destroy COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO comm 0x49ae69e0 rank 0 nranks 1 cudaDev 0 busId 26000 - Destroy COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO comm 0x475acf70 rank 1 nranks 2 cudaDev 1 busId c6000 - Destroy COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO comm 0x474a1920 rank 0 nranks 1 cudaDev 1 busId c6000 - Destroy COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO comm 0x49774de0 rank 0 nranks 2 cudaDev 0 busId 26000 - Destroy COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO comm 0x4966d1d0 rank 0 nranks 1 cudaDev 0 busId 26000 - Destroy COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO comm 0x47130ca0 rank 1 nranks 2 cudaDev 1 busId c6000 - Destroy COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO comm 0x47029090 rank 0 nranks 1 cudaDev 1 busId c6000 - Destroy COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO comm 0x495655c0 rank 0 nranks 2 cudaDev 0 busId 26000 - Destroy COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO comm 0x46f21480 rank 1 nranks 2 cudaDev 1 busId c6000 - Destroy COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO comm 0x4935c980 rank 0 nranks 1 cudaDev 0 busId 26000 - Destroy COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO comm 0x46d18a50 rank 0 nranks 1 cudaDev 1 busId c6000 - Destroy COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO comm 0x49250c20 rank 0 nranks 1 cudaDev 0 busId 26000 - Destroy COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO comm 0x46c0ccf0 rank 0 nranks 1 cudaDev 1 busId c6000 - Destroy COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO comm 0x46b010f0 rank 0 nranks 1 cudaDev 1 busId c6000 - Destroy COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO comm 0x49144dc0 rank 0 nranks 1 cudaDev 0 busId 26000 - Destroy COMPLETE
+gh007:2125088:2125088 [1] NCCL INFO comm 0x4590dd40 rank 1 nranks 2 cudaDev 1 busId c6000 - Destroy COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO comm 0x47f54a00 rank 0 nranks 2 cudaDev 0 busId 26000 - Destroy COMPLETE
+gh007:2125087:2125087 [0] NCCL INFO comm 0x47ca5bc0 rank 0 nranks 2 cudaDev 0 busId 26000 - Destroy COMPLETE
+[11-10 18:27:18] Worker 0: Shutdown complete.
+gh007:2125088:2125088 [1] NCCL INFO comm 0x4565ffd0 rank 1 nranks 2 cudaDev 1 busId c6000 - Destroy COMPLETE
+[93m[11-10 18:27:23] Local worker sglang-diffusionWorker-0 did not terminate gracefully, forcing.[0;0m
