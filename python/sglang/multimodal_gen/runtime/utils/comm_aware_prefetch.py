@@ -180,6 +180,10 @@ class _KernelCommRegion:
         if not self._active_started:
             return
         if self._gate is not None:
+            if self._tracker._gate_coarse and not self._tracker._coarse_phase_done(self._tag):
+                # coarse-grained pause (rebuttal baseline): the flag stays set from the
+                # first collective of an attention phase until its output collective
+                return
             # The current stream already waits on the collective's Work, so this
             # write lands right after the collective completes on the GPU.
             self._gate.write(torch.cuda.current_stream(), 0)
@@ -244,6 +248,9 @@ class CommunicationActivityTracker:
         self._managers: list[Any] = []
         self._gate: _StreamGate | None = None
         self._gate_failed = False
+        # coarse-grained pause: keep the flag set across a whole attention phase
+        self._gate_coarse = os.getenv("SGLANG_DIT_COMM_GATE_COARSE", "0").strip().lower() in {"1", "true", "yes"}
+        self._coarse_open = 0
         self._cur_block: tuple[Any, int, float] | None = None
         self._block_dur: Dict[int, float] = {}
         self._block_comm: Dict[int, float] = {}
@@ -297,6 +304,20 @@ class CommunicationActivityTracker:
                         "collectives fall back to host-side launch windows", ex,
                     )
             return self._gate
+
+    def _coarse_phase_done(self, tag: str) -> bool:
+        """True when this collective closes a coarse communication phase (the output
+        collective of an attention), or as a safety valve after 8 unclosed inputs."""
+        t = (tag or "").lower()
+        if "output" in t or "all_gather" in t:
+            self._coarse_open = 0
+            return True
+        self._coarse_open += 1
+        if self._coarse_open > 8:
+            logger.warning("[comm-gate] coarse phase not closed after 8 collectives; clearing the flag")
+            self._coarse_open = 0
+            return True
+        return False
 
     def gate_stats(self) -> Dict[str, int]:
         g = self._gate

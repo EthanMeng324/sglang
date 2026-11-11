@@ -77,6 +77,8 @@ run_one() {
         launch|kernel|none|gpu|auto|gate)
                 env_vars+=("${cf[@]}" SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE="$arm" SGLANG_DIT_OFFLOAD_RESIDENT_RATIO=)
                 flags+=("${offload[@]}") ;;
+        coarse) env_vars+=("${cf[@]}" SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE=gate SGLANG_DIT_COMM_GATE_COARSE=1 SGLANG_DIT_OFFLOAD_RESIDENT_RATIO=)
+                flags+=("${offload[@]}") ;;
         paced)  env_vars+=("${cf[@]}" SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE=none SGLANG_DIT_PREFETCH_PACE_GBPS="${PACE_GBPS:-16}" SGLANG_DIT_OFFLOAD_RESIDENT_RATIO=)
                 flags+=("${offload[@]}") ;;
         ratio)  env_vars+=("${cf[@]}" SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE="$RATIO_WINDOW" SGLANG_DIT_OFFLOAD_RESIDENT_RATIO="$RESIDENT_RATIO")
