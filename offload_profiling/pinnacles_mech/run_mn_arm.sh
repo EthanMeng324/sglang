@@ -61,7 +61,7 @@ cmd=(sglang generate
     --nnodes "$NNODES" --node-rank "$NODE_RANK" --dist-init-addr "$MASTER_ADDR:$PORT" --dist-timeout "${DIST_TIMEOUT:-900}"
     --prompt "$PROMPT" --num-inference-steps "$STEPS" "${MFLAGS[@]}"
     --port "$((30000 + OFF))" --scheduler-port "$((5700 + OFF))"
-    --output-path "$OUT" --output-file-name "${ARM}.out" --no-save-output
+    --output-path "$OUT" --output-file-name "${ARM}.out" --seed 42
     "${flags[@]}")
 suffix=""; [[ "$NODE_RANK" != 0 ]] && suffix="_node${NODE_RANK}"
 [[ "$NODE_RANK" == 0 ]] && cmd+=(--perf-dump-path "$OUT/profiles/perf_${ARM}.json")

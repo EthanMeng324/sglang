@@ -91,7 +91,7 @@ run_one() {
         --prompt "$PROMPT" --num-inference-steps "$STEPS" "${MFLAGS[@]}"
         --master-port "$((29500 + off))" --port "$((30000 + off))" --scheduler-port "$((5700 + off))"
         --perf-dump-path "$PROF/perf_${arm}.json"
-        --output-path "$OUT" --output-file-name "${arm}.out" --no-save-output
+        --output-path "$OUT" --output-file-name "${arm}.out" --seed 42
         "${flags[@]}")
     if [[ "$use_nsys" == "1" ]]; then
         cmd=(nsys profile --trace=cuda,nvtx,osrt --cuda-memory-usage=true --trace-fork-before-exec=true

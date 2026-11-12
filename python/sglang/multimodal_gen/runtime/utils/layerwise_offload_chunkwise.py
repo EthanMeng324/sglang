@@ -152,10 +152,12 @@ class LayerwiseOffloadManager:
             resident_phase_ratio is not None and phase_aware_mode
         )
         self._use_record_stream_protection = self._auto_bucket_phases
-        self._use_deferred_buffer_release = bool(
-            self._auto_bucket_phases
-            and _env_bool("SGLANG_DIT_OFFLOAD_DEFER_BUCKET_RELEASE", False)
-        )
+        # A layer's GPU buffers are released in the post-forward hook, i.e. when the layer's
+        # forward has been enqueued, not executed. Keeping them alive until an event recorded
+        # on the compute stream at that point completes stops the caching allocator from
+        # handing the blocks to the next prefetched layer while the GPU may still be reading
+        # them (otherwise the copy stream overwrites weights in use: black/noise outputs).
+        self._use_deferred_buffer_release = not _env_bool("SGLANG_DIT_OFFLOAD_IMMEDIATE_RELEASE", False)
         self.phase_name_to_idx = {
             spec.name: phase_idx for phase_idx, spec in enumerate(self.phase_specs)
         }
