@@ -1,0 +1,21 @@
+[2026-11-11 22:18:33] v2 start job=22769625 host=gh006 commit=67e62bdff Chunk-wise offload: allocate GPU weight buffers on the copy 
+[2026-11-11 22:18:33] fix line: 1313:                    # Weight buffers are allocated on the copy stream: its own allocator pool,
+[2026-11-11 22:18:33] run f=41 arm=gate TAG=h100v2
+[2026-11-11 22:27:20] end f=41 arm=gate TAG=h100v2 rc=0 average time per step: 5.8964
+[2026-11-11 22:27:20] run f=81 arm=no TAG=h100v2
+[2026-11-11 22:33:06] end f=81 arm=no TAG=h100v2 rc=0 average time per step: 5.5826
+[2026-11-11 22:33:06] run f=81 arm=gate TAG=h100v2
+[2026-11-11 22:38:55] end f=81 arm=gate TAG=h100v2 rc=0 average time per step: 5.1353
+[2026-11-11 22:38:55] run f=121 arm=no TAG=h100v2
+[2026-11-11 22:45:06] end f=121 arm=no TAG=h100v2 rc=0 average time per step: 6.5076
+[2026-11-11 22:45:06] run f=121 arm=gate TAG=h100v2
+[2026-11-11 22:51:33] end f=121 arm=gate TAG=h100v2 rc=0 average time per step: 5.9020
+[2026-11-11 22:51:33] run f=161 arm=gate TAG=h100v2
+[2026-11-11 22:57:46] end f=161 arm=gate TAG=h100v2 rc=0 average time per step: 6.8280
+== PSNR gate(v2) vs no (diag/psnr.py)
+f41 gate_v2 vs wan_c41_mn2_h100fix/no.out.mp4: frames=45 shape=(45, 704, 1280, 3) identical_frames=45 mean_psnr_db=inf
+f81 gate_v2 vs wan_c81_mn2_h100v2/no.out.mp4: frames=85 shape=(85, 704, 1280, 3) identical_frames=85 mean_psnr_db=inf
+f121 gate_v2 vs wan_c121_mn2_h100v2/no.out.mp4: frames=125 shape=(125, 704, 1280, 3) identical_frames=125 mean_psnr_db=inf
+f161 gate_v2 vs wan_c161_mn2_h100d1/no.out.mp4: frames=165 shape=(165, 704, 1280, 3) identical_frames=165 mean_psnr_db=inf
+baseline no161_d1 vs no161_d2: frames=165 shape=(165, 704, 1280, 3) identical_frames=165 mean_psnr_db=inf
+[2026-11-11 22:58:00] v2 finished

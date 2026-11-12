@@ -1,0 +1,201 @@
+{
+  "timestamp": "2026-11-12T03:44:43.431932+00:00",
+  "request_id": "916e814d-68ba-4bdd-9065-cb16dddbddc8",
+  "commit_hash": "N/A",
+  "tag": "cli_generate",
+  "total_duration_ms": 78707.56619199528,
+  "steps": [
+    {
+      "name": "InputValidationStage",
+      "duration_ms": 0.0526710064150393
+    },
+    {
+      "name": "TextEncodingStage",
+      "duration_ms": 3734.2690660007065
+    },
+    {
+      "name": "LatentPreparationStage",
+      "duration_ms": 0.6049799994798377
+    },
+    {
+      "name": "TimestepPreparationStage",
+      "duration_ms": 0.24338799994438887
+    },
+    {
+      "name": "DenoisingStage",
+      "duration_ms": 65162.60331599915
+    },
+    {
+      "name": "DecodingStage",
+      "duration_ms": 9789.014605994453
+    }
+  ],
+  "denoise_steps_ms": [
+    {
+      "step": 0,
+      "duration_ms": 54029.97692899953
+    },
+    {
+      "step": 1,
+      "duration_ms": 1221.013108995976
+    },
+    {
+      "step": 2,
+      "duration_ms": 1227.5356970058056
+    },
+    {
+      "step": 3,
+      "duration_ms": 1230.3117800038308
+    },
+    {
+      "step": 4,
+      "duration_ms": 1227.4996569904033
+    },
+    {
+      "step": 5,
+      "duration_ms": 1223.8496449863305
+    },
+    {
+      "step": 6,
+      "duration_ms": 1229.5162039954448
+    },
+    {
+      "step": 7,
+      "duration_ms": 1226.2043929949868
+    },
+    {
+      "step": 8,
+      "duration_ms": 1229.224233989953
+    },
+    {
+      "step": 9,
+      "duration_ms": 1228.844001001562
+    }
+  ],
+  "memory_checkpoints": {
+    "before_forward": {
+      "allocated_mb": 0.0,
+      "reserved_mb": 0.0,
+      "peak_allocated_mb": 0.0,
+      "peak_reserved_mb": 0.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 0.0,
+        "allocator_active_bytes_mb": 0.0,
+        "allocator_reserved_bytes_mb": 0.0,
+        "allocator_inactive_split_bytes_mb": 0.0,
+        "allocator_requested_bytes_mb": 0.0
+      }
+    },
+    "after_InputValidationStage": {
+      "allocated_mb": 0.0,
+      "reserved_mb": 0.0,
+      "peak_allocated_mb": 0.0,
+      "peak_reserved_mb": 0.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 0.0,
+        "allocator_active_bytes_mb": 0.0,
+        "allocator_reserved_bytes_mb": 0.0,
+        "allocator_inactive_split_bytes_mb": 0.0,
+        "allocator_requested_bytes_mb": 0.0
+      }
+    },
+    "after_TextEncodingStage": {
+      "allocated_mb": 48.01,
+      "reserved_mb": 12022.0,
+      "peak_allocated_mb": 8052.01,
+      "peak_reserved_mb": 12022.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 48.01,
+        "allocator_active_bytes_mb": 48.01,
+        "allocator_reserved_bytes_mb": 12022.0,
+        "allocator_inactive_split_bytes_mb": 3959.99,
+        "allocator_requested_bytes_mb": 48.01
+      }
+    },
+    "after_LatentPreparationStage": {
+      "allocated_mb": 68.63,
+      "reserved_mb": 12022.0,
+      "peak_allocated_mb": 8052.01,
+      "peak_reserved_mb": 12022.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 68.63,
+        "allocator_active_bytes_mb": 68.63,
+        "allocator_reserved_bytes_mb": 12022.0,
+        "allocator_inactive_split_bytes_mb": 3939.37,
+        "allocator_requested_bytes_mb": 68.63
+      }
+    },
+    "after_TimestepPreparationStage": {
+      "allocated_mb": 68.63,
+      "reserved_mb": 12022.0,
+      "peak_allocated_mb": 8052.01,
+      "peak_reserved_mb": 12022.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 68.63,
+        "allocator_active_bytes_mb": 68.63,
+        "allocator_reserved_bytes_mb": 12022.0,
+        "allocator_inactive_split_bytes_mb": 3939.37,
+        "allocator_requested_bytes_mb": 68.63
+      }
+    },
+    "after_DenoisingStage": {
+      "allocated_mb": 9637.66,
+      "reserved_mb": 12024.0,
+      "peak_allocated_mb": 11629.37,
+      "peak_reserved_mb": 12024.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 9637.66,
+        "allocator_active_bytes_mb": 9637.66,
+        "allocator_reserved_bytes_mb": 12024.0,
+        "allocator_inactive_split_bytes_mb": 2386.34,
+        "allocator_requested_bytes_mb": 9636.91
+      }
+    },
+    "after_DecodingStage": {
+      "allocated_mb": 11114.35,
+      "reserved_mb": 29562.0,
+      "peak_allocated_mb": 24461.22,
+      "peak_reserved_mb": 29562.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 11114.35,
+        "allocator_active_bytes_mb": 11231.71,
+        "allocator_reserved_bytes_mb": 29562.0,
+        "allocator_inactive_split_bytes_mb": 8782.29,
+        "allocator_requested_bytes_mb": 11226.53
+      }
+    },
+    "after_forward": {
+      "allocated_mb": 11114.35,
+      "reserved_mb": 29562.0,
+      "peak_allocated_mb": 24461.22,
+      "peak_reserved_mb": 29562.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 11114.35,
+        "allocator_active_bytes_mb": 11231.71,
+        "allocator_reserved_bytes_mb": 29562.0,
+        "allocator_inactive_split_bytes_mb": 8782.29,
+        "allocator_requested_bytes_mb": 11226.53
+      }
+    },
+    "mem_analysis": {
+      "allocated_mb": 11114.35,
+      "reserved_mb": 29562.0,
+      "peak_allocated_mb": 24461.22,
+      "peak_reserved_mb": 29562.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 11114.35,
+        "allocator_active_bytes_mb": 11231.71,
+        "allocator_reserved_bytes_mb": 29562.0,
+        "allocator_inactive_split_bytes_mb": 8782.29,
+        "allocator_requested_bytes_mb": 11226.53
+      }
+    }
+  },
+  "extra": {
+    "denoising_step_timing_source": "host_sync"
+  },
+  "meta": {
+    "prompt": "A cat walks on the grass, realistic",
+    "model": "/scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers"
+  }
+}

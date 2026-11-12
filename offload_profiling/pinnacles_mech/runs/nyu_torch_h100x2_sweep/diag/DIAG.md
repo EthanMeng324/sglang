@@ -1,5 +1,9 @@
 # Diagnosis of the two H100 gate anomalies (1x2 H100 NVLink, SP=2), 2026-11-11
 
+> **Superseded (2026-11-12):** the gate conclusions below (all-black output, release fix not effective) describe the
+> pre-67e62bdff code and are void for the current code. The root cause was buffer allocation from the compute stream's
+> pool; with 67e62bdff gate output is bit-identical to no at 41/81/121/161 frames (see summary.md, 'gate v2').
+
 Setup for every run below: Wan2.2-TI2V-5B, 704x1280, 10 steps, torch.compile on (COMPILE=1), CHUNK_MB=16 unless
 stated, NNODES=1 GPUS_PER_NODE=2, `run_mn_arm_diag.sh` (copy of run_mn_arm.sh; changes: compile only when COMPILE=1,
 --no-save-output removed, --seed 42 added; --seed exists and its default is already 42). Videos are saved as
