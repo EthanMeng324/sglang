@@ -7,6 +7,7 @@
 #SBATCH -N 2
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:l40s:2
+#SBATCH --exclude=gnode017
 #SBATCH -c 16
 #SBATCH --mem=200G
 #SBATCH -t 01:00:00

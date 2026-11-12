@@ -15,6 +15,7 @@ WS="${WS:-/data/hanmeng/chunkflow}"
 NNODES="${NNODES:-2}"; GPUS_PER_NODE="${GPUS_PER_NODE:-4}"; NODE_RANK="${NODE_RANK:-${SLURM_NODEID:-0}}"
 TOTAL=$(( NNODES * GPUS_PER_NODE ))
 STEPS="${STEPS:-10}"; NSYS="${NSYS:-0}"; CHUNK_MB="${CHUNK_MB:-4}"; ATTN="${ATTENTION_BACKEND:-fa}"
+COMPILE_FLAG=--enable-torch-compile; [[ "${COMPILE:-1}" == 1 ]] || COMPILE_FLAG=""   # COMPILE=0 -> eager
 TAG="${TAG:-}"; RUN="${MODEL}_c${CFG}_mn${TOTAL}${TAG:+_$TAG}"; OUT="${OUT:-$WS/results/$RUN}"
 PORT=$(( ${MASTER_PORT:-29500} + OFF ))
 : "${MASTER_ADDR:?MASTER_ADDR (node 0) is required}"
@@ -57,7 +58,7 @@ esac
 
 cmd=(sglang generate
     --model-path "$MP" --text-encoder-cpu-offload --pin-cpu-memory
-    --num-gpus "$TOTAL" --ulysses-degree "$TOTAL" --attention-backend "$ATTN" --enable-torch-compile
+    --num-gpus "$TOTAL" --ulysses-degree "$TOTAL" --attention-backend "$ATTN" $COMPILE_FLAG
     --nnodes "$NNODES" --node-rank "$NODE_RANK" --dist-init-addr "$MASTER_ADDR:$PORT" --dist-timeout "${DIST_TIMEOUT:-900}"
     --prompt "$PROMPT" --num-inference-steps "$STEPS" "${MFLAGS[@]}"
     --port "$((30000 + OFF))" --scheduler-port "$((5700 + OFF))"

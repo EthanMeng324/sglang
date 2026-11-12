@@ -151,7 +151,9 @@ class LayerwiseOffloadManager:
         self._auto_bucket_phases = bool(
             resident_phase_ratio is not None and phase_aware_mode
         )
-        self._use_record_stream_protection = self._auto_bucket_phases
+        # Every materialized buffer is read by the compute stream: record that use so the
+        # allocator waits for it before the freed block is reused (any mode).
+        self._use_record_stream_protection = True
         # A layer's GPU buffers are released in the post-forward hook, i.e. when the layer's
         # forward has been enqueued, not executed. Keeping them alive until an event recorded
         # on the compute stream at that point completes stops the caching allocator from
@@ -1308,14 +1310,19 @@ class LayerwiseOffloadManager:
                     cpu_phase_buffers = self._consolidated_cpu_weights[layer_idx].get(
                         phase_idx, {}
                     )
-                    self._prefetch_gpu_buffers[layer_idx][phase_idx] = {
-                        dtype: torch.empty(
-                            cpu_buffer.shape,
-                            dtype=dtype,
-                            device=self.device,
-                        )
-                        for dtype, cpu_buffer in cpu_phase_buffers.items()
-                    }
+                    # Weight buffers are allocated on the copy stream: its own allocator pool,
+                    # so a block the forward just freed (an activation with kernels still
+                    # pending on the compute stream) is never handed to a weight buffer that
+                    # the copy stream fills right away.
+                    with torch.cuda.stream(self.copy_stream):
+                        self._prefetch_gpu_buffers[layer_idx][phase_idx] = {
+                            dtype: torch.empty(
+                                cpu_buffer.shape,
+                                dtype=dtype,
+                                device=self.device,
+                            )
+                            for dtype, cpu_buffer in cpu_phase_buffers.items()
+                        }
                     self._prefetch_offsets[layer_idx][phase_idx] = {
                         dtype: 0 for dtype in cpu_phase_buffers
                     }
