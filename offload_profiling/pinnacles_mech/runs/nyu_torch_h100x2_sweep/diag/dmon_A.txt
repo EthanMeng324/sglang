@@ -1,0 +1,8 @@
+no gpu0: window 65826-65843s (16.8s, 18 samples) pclk_MHz=1859 pwr_W=684 mclk_MHz=2619
+no gpu1: window 65826-65843s (16.8s, 18 samples) pclk_MHz=1899 pwr_W=681 mclk_MHz=2619
+gate gpu0: window 66109-66125s (15.6s, 17 samples) pclk_MHz=1972 pwr_W=524 mclk_MHz=2619
+gate gpu1: window 66109-66125s (15.6s, 17 samples) pclk_MHz=1972 pwr_W=521 mclk_MHz=2619
+no gpu0: window 66380-66397s (16.9s, 18 samples) pclk_MHz=1868 pwr_W=674 mclk_MHz=2619
+no gpu1: window 66380-66397s (16.9s, 18 samples) pclk_MHz=1887 pwr_W=667 mclk_MHz=2619
+gate gpu0: window 66672-66688s (15.6s, 17 samples) pclk_MHz=1969 pwr_W=521 mclk_MHz=2619
+gate gpu1: window 66672-66688s (15.6s, 17 samples) pclk_MHz=1970 pwr_W=517 mclk_MHz=2619

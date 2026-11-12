@@ -1,0 +1,621 @@
+{
+  "timestamp": "2026-11-11T23:31:44.053725+00:00",
+  "request_id": "1c9603ac-3d28-4c5f-8dda-e12afce36613",
+  "commit_hash": "N/A",
+  "tag": "cli_generate",
+  "total_duration_ms": 63887.25097601127,
+  "steps": [
+    {
+      "name": "InputValidationStage",
+      "duration_ms": 0.03874101093970239
+    },
+    {
+      "name": "TextEncodingStage",
+      "duration_ms": 3335.1636879961006
+    },
+    {
+      "name": "LatentPreparationStage",
+      "duration_ms": 0.9398510010214522
+    },
+    {
+      "name": "TimestepPreparationStage",
+      "duration_ms": 0.3897729911841452
+    },
+    {
+      "name": "DenoisingStage",
+      "duration_ms": 47309.46367899014
+    },
+    {
+      "name": "DecodingStage",
+      "duration_ms": 13225.52090100362
+    }
+  ],
+  "denoise_steps_ms": [
+    {
+      "step": 0,
+      "duration_ms": 31621.619580997503
+    },
+    {
+      "step": 1,
+      "duration_ms": 1846.4494380023098
+    },
+    {
+      "step": 2,
+      "duration_ms": 1802.8685210010735
+    },
+    {
+      "step": 3,
+      "duration_ms": 1709.5784039993305
+    },
+    {
+      "step": 4,
+      "duration_ms": 1705.7195459929062
+    },
+    {
+      "step": 5,
+      "duration_ms": 1706.841423001606
+    },
+    {
+      "step": 6,
+      "duration_ms": 1713.2741259993054
+    },
+    {
+      "step": 7,
+      "duration_ms": 1706.0173360077897
+    },
+    {
+      "step": 8,
+      "duration_ms": 1708.262879998074
+    },
+    {
+      "step": 9,
+      "duration_ms": 1705.2298999915365
+    }
+  ],
+  "memory_checkpoints": {
+    "before_forward": {
+      "allocated_mb": 312.15,
+      "reserved_mb": 316.0,
+      "peak_allocated_mb": 312.15,
+      "peak_reserved_mb": 316.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 312.15,
+        "allocator_active_bytes_mb": 312.15,
+        "allocator_reserved_bytes_mb": 316.0,
+        "allocator_inactive_split_bytes_mb": 3.85,
+        "allocator_requested_bytes_mb": 312.15
+      }
+    },
+    "after_InputValidationStage": {
+      "allocated_mb": 312.15,
+      "reserved_mb": 316.0,
+      "peak_allocated_mb": 312.15,
+      "peak_reserved_mb": 316.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 312.15,
+        "allocator_active_bytes_mb": 312.15,
+        "allocator_reserved_bytes_mb": 316.0,
+        "allocator_inactive_split_bytes_mb": 3.85,
+        "allocator_requested_bytes_mb": 312.15
+      }
+    },
+    "after_TextEncodingStage": {
+      "allocated_mb": 360.16,
+      "reserved_mb": 12336.0,
+      "peak_allocated_mb": 8364.16,
+      "peak_reserved_mb": 12336.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 360.16,
+        "allocator_active_bytes_mb": 360.16,
+        "allocator_reserved_bytes_mb": 12336.0,
+        "allocator_inactive_split_bytes_mb": 3961.84,
+        "allocator_requested_bytes_mb": 360.16
+      }
+    },
+    "after_LatentPreparationStage": {
+      "allocated_mb": 387.23,
+      "reserved_mb": 12336.0,
+      "peak_allocated_mb": 8364.16,
+      "peak_reserved_mb": 12336.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 387.23,
+        "allocator_active_bytes_mb": 387.23,
+        "allocator_reserved_bytes_mb": 12336.0,
+        "allocator_inactive_split_bytes_mb": 3934.77,
+        "allocator_requested_bytes_mb": 387.23
+      }
+    },
+    "after_TimestepPreparationStage": {
+      "allocated_mb": 387.23,
+      "reserved_mb": 12336.0,
+      "peak_allocated_mb": 8364.16,
+      "peak_reserved_mb": 12336.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 387.23,
+        "allocator_active_bytes_mb": 387.23,
+        "allocator_reserved_bytes_mb": 12336.0,
+        "allocator_inactive_split_bytes_mb": 3934.77,
+        "allocator_requested_bytes_mb": 387.23
+      }
+    },
+    "after_DenoisingStage": {
+      "allocated_mb": 601.39,
+      "reserved_mb": 12336.0,
+      "peak_allocated_mb": 8364.16,
+      "peak_reserved_mb": 12336.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 601.39,
+        "allocator_active_bytes_mb": 601.39,
+        "allocator_reserved_bytes_mb": 12336.0,
+        "allocator_inactive_split_bytes_mb": 3720.61,
+        "allocator_requested_bytes_mb": 600.66
+      }
+    },
+    "after_DecodingStage": {
+      "allocated_mb": 2491.44,
+      "reserved_mb": 19120.0,
+      "peak_allocated_mb": 15847.08,
+      "peak_reserved_mb": 19120.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 2491.44,
+        "allocator_active_bytes_mb": 2610.81,
+        "allocator_reserved_bytes_mb": 19120.0,
+        "allocator_inactive_split_bytes_mb": 8895.19,
+        "allocator_requested_bytes_mb": 2602.78
+      }
+    },
+    "after_forward": {
+      "allocated_mb": 2491.44,
+      "reserved_mb": 19120.0,
+      "peak_allocated_mb": 15847.08,
+      "peak_reserved_mb": 19120.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 2491.44,
+        "allocator_active_bytes_mb": 2610.81,
+        "allocator_reserved_bytes_mb": 19120.0,
+        "allocator_inactive_split_bytes_mb": 8895.19,
+        "allocator_requested_bytes_mb": 2602.78
+      }
+    },
+    "mem_analysis": {
+      "allocated_mb": 2491.44,
+      "reserved_mb": 19120.0,
+      "peak_allocated_mb": 15847.08,
+      "peak_reserved_mb": 19120.0,
+      "allocator_stats_mb": {
+        "allocator_allocated_bytes_mb": 2491.44,
+        "allocator_active_bytes_mb": 2610.81,
+        "allocator_reserved_bytes_mb": 19120.0,
+        "allocator_inactive_split_bytes_mb": 8895.19,
+        "allocator_requested_bytes_mb": 2602.78
+      }
+    }
+  },
+  "extra": {
+    "denoising_step_timing_source": "host_sync",
+    "offload_profile": {
+      "prefetch_critical_path_wait_ms": [
+        1.5105280263815075,
+        0.48060800950042903,
+        0.4490239860024303,
+        0.6385919842869043,
+        0.4717760107014328,
+        0.4514559991657734,
+        0.4954560019541532,
+        0.6701759858988225,
+        0.6567039920482785,
+        0.6824959947261959
+      ],
+      "prefetch_critical_path_wait_layers": [
+        4.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "prefetch_critical_path_waited_bytes": [
+        3458314240.0,
+        17092608.0,
+        0.0,
+        42100736.0,
+        0.0,
+        25323520.0,
+        210188288.0,
+        101294080.0,
+        0.0,
+        0.0
+      ],
+      "prefetch_critical_path_total_bytes": [
+        19638804480.0,
+        19638804480.0,
+        19638804480.0,
+        19638804480.0,
+        19638804480.0,
+        19638804480.0,
+        19638804480.0,
+        19638804480.0,
+        19638804480.0,
+        19638804480.0
+      ],
+      "offload_gpu_layer_count_begin": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "offload_managed_gpu_bytes_begin": [
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0
+      ],
+      "offload_materialized_layer_count_begin": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "offload_materialized_phase_count_begin": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "offload_prefetch_buffer_bytes_begin": [
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0
+      ],
+      "offload_resident_phase_bytes_begin": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offload_warm_layer0_loaded_begin": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "offload_gpu_layer_count_end": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "offload_managed_gpu_bytes_end": [
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0
+      ],
+      "offload_materialized_layer_count_end": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "offload_materialized_phase_count_end": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "offload_prefetch_buffer_bytes_end": [
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0,
+        327313408.0
+      ],
+      "offload_resident_phase_bytes_end": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offload_warm_layer0_loaded_end": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "source": "runtime_cuda_events"
+    },
+    "offload_runtime_debug": {
+      "source": "runtime_manager_snapshots",
+      "modules": {
+        "transformer": {
+          "managers": [
+            {
+              "layers_attr_str": "blocks",
+              "num_layers": 30,
+              "prefetch_size": 1,
+              "phase_prefetch_depth": 1,
+              "phase_names": [
+                "layer"
+              ],
+              "resident_phase_names": [],
+              "resident_phase_ratio": null,
+              "step_state_begin": {
+                "offload_gpu_layer_count": [
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "offload_managed_gpu_bytes": [
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0
+                ],
+                "offload_materialized_layer_count": [
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "offload_materialized_phase_count": [
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "offload_prefetch_buffer_bytes": [
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0
+                ],
+                "offload_resident_phase_bytes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "offload_warm_layer0_loaded": [
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              "step_state_end": {
+                "offload_gpu_layer_count": [
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "offload_managed_gpu_bytes": [
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0
+                ],
+                "offload_materialized_layer_count": [
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "offload_materialized_phase_count": [
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "offload_prefetch_buffer_bytes": [
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0,
+                  327313408.0
+                ],
+                "offload_resident_phase_bytes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "offload_warm_layer0_loaded": [
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              "current_state": {
+                "offload_managed_gpu_bytes": 327313408.0,
+                "offload_prefetch_buffer_bytes": 327313408.0,
+                "offload_resident_phase_bytes": 0.0,
+                "offload_materialized_layer_count": 1.0,
+                "offload_materialized_phase_count": 1.0,
+                "offload_gpu_layer_count": 1.0,
+                "offload_warm_layer0_loaded": 1.0
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "meta": {
+    "prompt": "A cat walks on the grass, realistic",
+    "model": "/scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers"
+  }
+}

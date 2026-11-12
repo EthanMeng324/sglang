@@ -1,0 +1,129 @@
+[11-11 20:04:27] server_args: {"model_path": "/scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers", "backend": "auto", "attention_backend": "fa", "attention_backend_config": {}, "cache_dit_config": null, "nccl_port": null, "trust_remote_code": false, "revision": null, "num_gpus": 2, "nnodes": 1, "node_rank": 0, "dist_init_addr": "gh014:29507", "tp_size": 1, "sp_degree": 2, "ulysses_degree": 2, "ring_degree": 1, "dp_size": 1, "dp_degree": 1, "enable_cfg_parallel": false, "hsdp_replicate_dim": 1, "hsdp_shard_dim": 2, "dist_timeout": 900, "pipeline_class_name": null, "lora_path": null, "lora_nickname": "default", "lora_scale": 1.0, "vae_path": null, "lora_target_modules": null, "dit_cpu_offload": true, "dit_layerwise_offload": true, "dit_offload_prefetch_size": 1.0, "dit_offload_resident_phases": "", "dit_offload_phase_prefetch_depth": 4, "dit_offload_resident_ratio": null, "dit_comm_active_window_mode": "kernel", "text_encoder_cpu_offload": true, "image_encoder_cpu_offload": true, "vae_cpu_offload": true, "use_fsdp_inference": false, "pin_cpu_memory": true, "comfyui_mode": false, "enable_torch_compile": true, "warmup": false, "warmup_resolutions": null, "disable_autocast": false, "master_port": 29507, "host": "127.0.0.1", "port": 30007, "webui": false, "webui_port": 12312, "scheduler_port": 5707, "output_path": "/scratch/yx2432/rebuttal_mn/results/wan_c161_mn2_h100fix", "prompt_file_path": null, "model_paths": {}, "model_loaded": {"transformer": true, "vae": true, "video_vae": true, "audio_vae": true, "video_dit": true, "audio_dit": true, "dual_tower_bridge": true}, "boundary_ratio": null, "log_level": "info"}
+[11-11 20:04:27] Local mode: True
+[11-11 20:04:27] Starting server...
+[11-11 20:05:25] Scheduler bind at endpoint: tcp://127.0.0.1:5707
+[11-11 20:05:25] Initializing distributed environment with world_size=2, device=cuda:0, timeout=900
+[11-11 20:05:25] Setting distributed timeout to 900 seconds
+NCCL version 2.27.5+cuda12.9
+[11-11 20:05:26] Found nccl from library libnccl.so.2
+[11-11 20:05:26] sglang-diffusion is using nccl==2.27.5
+[11-11 20:05:27] Found nccl from library libnccl.so.2
+[11-11 20:05:27] sglang-diffusion is using nccl==2.27.5
+[11-11 20:05:27] No pipeline_class_name specified, using model_index.json
+Loading required modules:   0%|          | 0/5 [00:00<?, ?it/s][11-11 20:05:28] [RunAI Streamer] Rank 1: CPU ring 7 x 2.0 GiB = 13.7 GiB for 10.6 GiB in 3 file(s)
+[11-11 20:05:29] Diffusers version: 0.35.0.dev0
+[11-11 20:05:29] Using native sglang backend for model '/scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers'
+[11-11 20:05:29] Found model info: ModelInfo(pipeline_cls=<class 'sglang.multimodal_gen.runtime.pipelines.wan_pipeline.WanPipeline'>, sampling_param_cls=<class 'sglang.multimodal_gen.configs.sample.wan.Wan2_2_TI2V_5B_SamplingParam'>, pipeline_config_cls=<class 'sglang.multimodal_gen.configs.pipeline_configs.wan.Wan2_2_TI2V_5B_Config'>)
+[11-11 20:05:29] Using pipeline from model_index.json: WanPipeline
+[11-11 20:05:29] Loading pipeline modules...
+[11-11 20:05:29] Model already exists locally and is complete
+[11-11 20:05:29] Model path: /scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers
+[11-11 20:05:29] Diffusers version: 0.35.0.dev0
+[11-11 20:05:29] Loading pipeline modules from config: {'_class_name': 'WanPipeline', '_diffusers_version': '0.35.0.dev0', 'boundary_ratio': None, 'expand_timesteps': True, 'scheduler': ['diffusers', 'UniPCMultistepScheduler'], 'text_encoder': ['transformers', 'UMT5EncoderModel'], 'tokenizer': ['transformers', 'T5TokenizerFast'], 'transformer': ['diffusers', 'WanTransformer3DModel'], 'transformer_2': [None, None], 'vae': ['diffusers', 'AutoencoderKLWan']}
+[11-11 20:05:29] Loading required components: ['text_encoder', 'tokenizer', 'vae', 'transformer', 'scheduler']
+Loading required modules:   0%|          | 0/5 [00:00<?, ?it/s][11-11 20:05:29] Loading text_encoder from /scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers/text_encoder. avail mem: 75.00 GB
+[11-11 20:05:29] [RunAI Streamer] Rank 0: CPU ring 7 x 2.0 GiB = 13.7 GiB for 10.6 GiB in 3 file(s)
+[11-11 20:05:37] [RunAI Streamer] Overall time to stream 10.6 GiB of all files to cpu: 9.07s, 1.2 GiB/s
+[11-11 20:05:38] [RunAI Streamer] Overall time to stream 10.6 GiB of all files to cpu: 9.01s, 1.2 GiB/s
+[11-11 20:06:10] Loaded text_encoder: FSDPUMT5EncoderModel (sgl-diffusion version). consumed: 0.49 GB, avail mem: 74.51 GB
+Loading required modules:  20%|██        | 1/5 [00:41<02:46, 41.75s/it][11-11 20:06:10] Loading tokenizer from /scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers/tokenizer. avail mem: 74.51 GB
+[11-11 20:06:11] Loaded tokenizer: T5TokenizerFast (sgl-diffusion version). consumed: 0.00 GB, avail mem: 74.51 GB
+Loading required modules:  40%|████      | 2/5 [00:42<00:52, 17.57s/it][11-11 20:06:11] Loading vae from /scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers/vae. avail mem: 74.51 GB
+Loading required modules:  20%|██        | 1/5 [00:44<02:56, 44.01s/it][11-11 20:06:12] Loaded vae: AutoencoderKLWan (sgl-diffusion version). consumed: 0.00 GB, avail mem: 74.51 GB
+Loading required modules:  60%|██████    | 3/5 [00:42<00:19,  9.79s/it][11-11 20:06:12] Loading transformer from /scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers/transformer. avail mem: 74.51 GB
+[11-11 20:06:12] Loading WanTransformer3DModel from 5 safetensors files , param_dtype: torch.bfloat16
+Loading required modules:  40%|████      | 2/5 [00:44<00:55, 18.47s/it]Loading required modules:  60%|██████    | 3/5 [00:45<00:20, 10.32s/it][93m[11-11 20:06:14] flash_attn 3 package is not installed. It's recommended to install flash_attn3 on hopper, otherwise performance is sub-optimal[0;0m
+[11-11 20:06:14] Using FlashAttention (FA3 for hopper, FA4 for blackwell) backend
+[11-11 20:06:14] Using FlashAttention (FA3 for hopper, FA4 for blackwell) backend
+[11-11 20:06:15] [RunAI Streamer] Rank 0: CPU ring 18 x 1.1 GiB = 19.4 GiB for 18.6 GiB in 5 file(s)
+[11-11 20:06:15] [RunAI Streamer] Rank 1: CPU ring 18 x 1.1 GiB = 19.4 GiB for 18.6 GiB in 5 file(s)
+[11-11 20:06:25] [RunAI Streamer] Overall time to stream 18.6 GiB of all files to cpu: 10.88s, 1.7 GiB/s
+[11-11 20:06:26] [RunAI Streamer] Overall time to stream 18.6 GiB of all files to cpu: 11.55s, 1.6 GiB/s
+[11-11 20:06:37] Loaded model with 5.00B parameters
+[11-11 20:06:37] Loaded transformer: WanTransformer3DModel (sgl-diffusion version). consumed: 0.00 GB, avail mem: 74.51 GB
+Loading required modules:  80%|████████  | 4/5 [01:08<00:16, 16.13s/it][11-11 20:06:37] Loading scheduler from /scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers/scheduler. avail mem: 74.51 GB
+[11-11 20:06:37] Loaded scheduler: UniPCMultistepScheduler (sgl-diffusion version). consumed: 0.00 GB, avail mem: 74.51 GB
+Loading required modules: 100%|██████████| 5/5 [01:08<00:00, 13.76s/it]
+[11-11 20:06:37] Creating pipeline stages...
+[11-11 20:06:37] Compiling transformer with mode: max-autotune-no-cudagraphs
+[11-11 20:06:37] Using FlashAttention (FA3 for hopper, FA4 for blackwell) backend
+[11-11 20:06:37] Pipeline instantiated
+Loading required modules:  80%|████████  | 4/5 [01:10<00:16, 16.29s/it]Loading required modules: 100%|██████████| 5/5 [01:10<00:00, 14.13s/it]
+[11-11 20:06:48] Layerwise offload phase bytes for blocks: pageable={'layer': 9.145} resident={}
+[11-11 20:06:48] [comm-gate] stream memops gate ready on cuda:0 (flag at 0xf27fa00200)
+[11-11 20:06:48] LayerwiseOffloadManager initialized with num prefetched layer: 1, total num layers: 30
+[11-11 20:06:48] Enabled layerwise offload for WanTransformer3DModel on modules: ['blocks']
+[11-11 20:06:48] Communication-aware chunk-wise offload is enabled (chunk=16MB, patch_torch_dist=False, comm_window=gate).
+[11-11 20:06:48] Worker 0: Initialized device, model, and distributed environment.
+[11-11 20:06:48] Worker 0: Scheduler loop started.
+[11-11 20:06:48] [comm-gate] stream memops gate ready on cuda:1 (flag at 0xf27fa00200)
+[11-11 20:06:48] Diffusers version: 0.35.0.dev0
+[11-11 20:06:48] Using native sglang backend for model '/scratch/yx2432/rebuttal_mn/models/Wan2.2-TI2V-5B-Diffusers'
+[11-11 20:06:48] Found model info: ModelInfo(pipeline_cls=<class 'sglang.multimodal_gen.runtime.pipelines.wan_pipeline.WanPipeline'>, sampling_param_cls=<class 'sglang.multimodal_gen.configs.sample.wan.Wan2_2_TI2V_5B_SamplingParam'>, pipeline_config_cls=<class 'sglang.multimodal_gen.configs.pipeline_configs.wan.Wan2_2_TI2V_5B_Config'>)
+[11-11 20:06:48] Adjusting number of frames from 161 to 165 based on number of GPUs (2)
+[11-11 20:06:48] Processing prompt 1/1: A cat walks on the grass, realistic
+[11-11 20:06:48] Running pipeline stages: ['input_validation_stage', 'text_encoding_stage', 'latent_preparation_stage', 'timestep_preparation_stage', 'denoising_stage', 'decoding_stage']
+[11-11 20:06:48] [InputValidationStage] started...
+[11-11 20:06:48] [InputValidationStage] finished in 0.0001 seconds
+[11-11 20:06:48] [TextEncodingStage] started...
+[11-11 20:06:51] [TextEncodingStage] finished in 3.1594 seconds
+[11-11 20:06:51] [LatentPreparationStage] started...
+[11-11 20:06:51] [LatentPreparationStage] finished in 0.0007 seconds
+[11-11 20:06:51] [TimestepPreparationStage] started...
+[11-11 20:06:51] [TimestepPreparationStage] finished in 0.0004 seconds
+[11-11 20:06:51] [DenoisingStage] started...
+  0%|          | 0/10 [00:00<?, ?it/s]/scratch/yx2432/rebuttal_mn/sglang/.venv/lib/python3.12/site-packages/torch/_dynamo/variables/functions.py:1692: UserWarning: Dynamo detected a call to a `functools.lru_cache`-wrapped function. Dynamo ignores the cache wrapper and directly traces the wrapped function. Silent incorrectness is only a *potential* risk, not something we have observed. Enable TORCH_LOGS="+dynamo" for a DEBUG stack trace.
+  torch._dynamo.utils.warn_once(msg)
+/scratch/yx2432/rebuttal_mn/sglang/.venv/lib/python3.12/site-packages/torch/_dynamo/variables/functions.py:1692: UserWarning: Dynamo detected a call to a `functools.lru_cache`-wrapped function. Dynamo ignores the cache wrapper and directly traces the wrapped function. Silent incorrectness is only a *potential* risk, not something we have observed. Enable TORCH_LOGS="+dynamo" for a DEBUG stack trace.
+  torch._dynamo.utils.warn_once(msg)
+/scratch/yx2432/rebuttal_mn/sglang/.venv/lib/python3.12/site-packages/torch/_dynamo/variables/functions.py:1598: UserWarning: Dynamo does not know how to trace the builtin `<unknown module>.datetime.now.` This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind).
+If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround.
+If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use `torch.compiler.allow_in_graph`.
+  torch._dynamo.utils.warn_once(explanation + "\n" + "\n".join(hints))
+/scratch/yx2432/rebuttal_mn/sglang/.venv/lib/python3.12/site-packages/torch/_dynamo/variables/functions.py:1598: UserWarning: Dynamo does not know how to trace the builtin `<unknown module>.datetime.now.` This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind).
+If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround.
+If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use `torch.compiler.allow_in_graph`.
+  torch._dynamo.utils.warn_once(explanation + "\n" + "\n".join(hints))
+[rank1]:W1111 20:07:24.697000 3210619 torch/_dynamo/convert_frame.py:1358] [33/16] torch._dynamo hit config.recompile_limit (16)
+[rank1]:W1111 20:07:24.697000 3210619 torch/_dynamo/convert_frame.py:1358] [33/16]    function: 'torch_dynamo_resume_in_forward_at_503' (/scratch/yx2432/rebuttal_mn/sglang/python/sglang/multimodal_gen/runtime/models/dits/wanvideo.py:503)
+[rank1]:W1111 20:07:24.697000 3210619 torch/_dynamo/convert_frame.py:1358] [33/16]    last reason: 33/0: Cache line invalidated because L['mock_comm_fn'] got deallocated
+[rank1]:W1111 20:07:24.697000 3210619 torch/_dynamo/convert_frame.py:1358] [33/16] To log all recompilation reasons, use TORCH_LOGS="recompiles".
+[rank1]:W1111 20:07:24.697000 3210619 torch/_dynamo/convert_frame.py:1358] [33/16] To diagnose recompilation issues, see https://pytorch.org/docs/main/torch.compiler_troubleshooting.html
+[rank0]:W1111 20:07:24.700000 3210618 torch/_dynamo/convert_frame.py:1358] [33/16] torch._dynamo hit config.recompile_limit (16)
+[rank0]:W1111 20:07:24.700000 3210618 torch/_dynamo/convert_frame.py:1358] [33/16]    function: 'torch_dynamo_resume_in_forward_at_503' (/scratch/yx2432/rebuttal_mn/sglang/python/sglang/multimodal_gen/runtime/models/dits/wanvideo.py:503)
+[rank0]:W1111 20:07:24.700000 3210618 torch/_dynamo/convert_frame.py:1358] [33/16]    last reason: 33/0: Cache line invalidated because L['mock_comm_fn'] got deallocated
+[rank0]:W1111 20:07:24.700000 3210618 torch/_dynamo/convert_frame.py:1358] [33/16] To log all recompilation reasons, use TORCH_LOGS="recompiles".
+[rank0]:W1111 20:07:24.700000 3210618 torch/_dynamo/convert_frame.py:1358] [33/16] To diagnose recompilation issues, see https://pytorch.org/docs/main/torch.compiler_troubleshooting.html
+[11-11 20:07:25] [ChunkwiseStep] step=1 wall_s=18.436 bg_chunks=569 bg_mb=8884.21 bg_copy_s=0.604 sync_chunks=16 sync_mb=248.15 sync_copy_s=0.005 sync_ratio_mb_pct=2.72 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.004 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=1.009 auto=yield=0/share=0
+[11-11 20:07:25] [ChunkwiseStep] step=2 wall_s=0.441 bg_chunks=586 bg_mb=9148.36 bg_copy_s=0.255 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=1.011 auto=yield=0/share=0
+ 10%|█         | 1/10 [00:34<05:09, 34.38s/it][11-11 20:07:26] [ChunkwiseStep] step=3 wall_s=0.429 bg_chunks=580 bg_mb=9052.36 bg_copy_s=0.239 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=1.000 auto=yield=0/share=0
+[11-11 20:07:27] [ChunkwiseStep] step=4 wall_s=0.843 bg_chunks=581 bg_mb=9068.36 bg_copy_s=0.489 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=1.002 auto=yield=0/share=0
+ 20%|██        | 2/10 [00:35<01:59, 14.93s/it][11-11 20:07:28] [ChunkwiseStep] step=5 wall_s=0.428 bg_chunks=578 bg_mb=9020.36 bg_copy_s=0.237 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=0.996 auto=yield=0/share=0
+[11-11 20:07:29] [ChunkwiseStep] step=6 wall_s=0.843 bg_chunks=583 bg_mb=9100.36 bg_copy_s=0.499 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=1.005 auto=yield=0/share=0
+ 30%|███       | 3/10 [00:37<01:02,  8.90s/it][11-11 20:07:30] [ChunkwiseStep] step=7 wall_s=0.424 bg_chunks=578 bg_mb=9020.36 bg_copy_s=0.237 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=0.996 auto=yield=0/share=0
+[11-11 20:07:31] [ChunkwiseStep] step=8 wall_s=0.843 bg_chunks=581 bg_mb=9068.36 bg_copy_s=0.476 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=1.002 auto=yield=0/share=0
+ 40%|████      | 4/10 [00:39<00:36,  6.05s/it][11-11 20:07:31] [ChunkwiseStep] step=9 wall_s=0.423 bg_chunks=580 bg_mb=9052.36 bg_copy_s=0.200 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=1.000 auto=yield=0/share=0
+[11-11 20:07:32] [ChunkwiseStep] step=10 wall_s=0.843 bg_chunks=578 bg_mb=9020.36 bg_copy_s=0.450 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=0.996 auto=yield=0/share=0
+ 50%|█████     | 5/10 [00:40<00:22,  4.48s/it][11-11 20:07:33] [ChunkwiseStep] step=11 wall_s=0.428 bg_chunks=582 bg_mb=9084.36 bg_copy_s=0.239 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=1.004 auto=yield=0/share=0
+[11-11 20:07:34] [ChunkwiseStep] step=12 wall_s=0.843 bg_chunks=579 bg_mb=9036.36 bg_copy_s=0.465 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=0.998 auto=yield=0/share=0
+ 60%|██████    | 6/10 [00:42<00:14,  3.54s/it][11-11 20:07:35] [ChunkwiseStep] step=13 wall_s=0.429 bg_chunks=579 bg_mb=9036.36 bg_copy_s=0.239 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=0.998 auto=yield=0/share=0
+[11-11 20:07:36] [ChunkwiseStep] step=14 wall_s=0.843 bg_chunks=583 bg_mb=9100.36 bg_copy_s=0.486 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=1.005 auto=yield=0/share=0
+ 70%|███████   | 7/10 [00:44<00:08,  2.94s/it][11-11 20:07:36] [ChunkwiseStep] step=15 wall_s=0.427 bg_chunks=579 bg_mb=9036.36 bg_copy_s=0.249 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=0.998 auto=yield=0/share=0
+[11-11 20:07:37] [ChunkwiseStep] step=16 wall_s=0.843 bg_chunks=581 bg_mb=9068.36 bg_copy_s=0.445 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=1.002 auto=yield=0/share=0
+ 80%|████████  | 8/10 [00:45<00:05,  2.54s/it][11-11 20:07:38] [ChunkwiseStep] step=17 wall_s=0.429 bg_chunks=579 bg_mb=9036.36 bg_copy_s=0.201 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=0.998 auto=yield=0/share=0
+[11-11 20:07:39] [ChunkwiseStep] step=18 wall_s=0.843 bg_chunks=581 bg_mb=9068.36 bg_copy_s=0.463 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=1.002 auto=yield=0/share=0
+ 90%|█████████ | 9/10 [00:47<00:02,  2.28s/it][11-11 20:07:40] [ChunkwiseStep] step=19 wall_s=0.423 bg_chunks=578 bg_mb=9020.36 bg_copy_s=0.249 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=0.996 auto=yield=0/share=0
+[11-11 20:07:41] [ChunkwiseStep] step=20 wall_s=0.845 bg_chunks=581 bg_mb=9068.36 bg_copy_s=0.437 sync_chunks=0 sync_mb=0.00 sync_copy_s=0.000 sync_ratio_mb_pct=0.00 wait_comm_bg_s=0.000 wait_comm_sync_s=0.000 ensure_ready_s=0.001 unique_loaded_layers=29 unique_loaded_mb=9052.36 copy_dup_ratio=1.002 auto=yield=0/share=0
+100%|██████████| 10/10 [00:49<00:00,  2.09s/it]100%|██████████| 10/10 [00:49<00:00,  4.97s/it]
+[11-11 20:07:41] [DenoisingStage] average time per step: 4.9678 seconds
+[11-11 20:07:41] [DenoisingStage] finished in 49.7506 seconds
+[11-11 20:07:41] [DecodingStage] started...
+[11-11 20:07:52] [DecodingStage] finished in 11.0960 seconds
+[11-11 20:07:52] Peak GPU memory: 25.97 GB, Peak allocated: 20.35 GB, Memory pool overhead: 5.62 GB (21.6%), Remaining GPU memory at peak: 53.68 GB. Components that could stay resident (based on the last request workload): ['text_encoder', 'vae', 'transformer']. Related offload server args to disable: --dit-layerwise-offload, --text-encoder-cpu-offload, --vae-cpu-offload
+[11-11 20:07:55] Output saved to [1;36m/scratch/yx2432/rebuttal_mn/results/wan_c161_mn2_h100fix/gate.out.mp4[0;0m
+[11-11 20:07:55] Pixel data generated successfully in [92m66.38[0;0m seconds
+[11-11 20:07:55] Completed batch processing. Generated 1 outputs in [92m66.38[0;0m seconds
+[11-11 20:07:55] Memory usage - Max peak: 26594.00 MB, Avg peak: 26594.00 MB
+[11-11 20:07:55] Metrics dumped to: [1;36m/scratch/yx2432/rebuttal_mn/results/wan_c161_mn2_h100fix/profiles/perf_gate.json[0;0m
+[93m[11-11 20:07:55] Generator was garbage collected without being shut down. Attempting to shut down the local server and client.[0;0m
+[11-11 20:08:00] Worker 0: Shutdown complete.

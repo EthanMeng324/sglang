@@ -1,0 +1,8 @@
+f41 fix no gpu0: window 71898-71902s (3.5s, 5 samples) pclk_MHz=1980 pwr_W=465 mclk_MHz=2619
+f41 fix no gpu1: window 71898-71902s (3.5s, 5 samples) pclk_MHz=1980 pwr_W=472 mclk_MHz=2619
+f41 fix gate gpu0: window 72173-72177s (4.3s, 5 samples) pclk_MHz=1980 pwr_W=374 mclk_MHz=2619
+f41 fix gate gpu1: window 72173-72177s (4.3s, 5 samples) pclk_MHz=1980 pwr_W=371 mclk_MHz=2619
+f161 fix gate gpu0: window 72446-72461s (15.3s, 16 samples) pclk_MHz=1980 pwr_W=477 mclk_MHz=2619
+f161 fix gate gpu1: window 72446-72461s (15.3s, 16 samples) pclk_MHz=1980 pwr_W=482 mclk_MHz=2619
+f161 fix stock gpu0: window 72742-72759s (16.8s, 18 samples) pclk_MHz=1892 pwr_W=663 mclk_MHz=2619
+f161 fix stock gpu1: window 72742-72759s (16.8s, 18 samples) pclk_MHz=1887 pwr_W=665 mclk_MHz=2619

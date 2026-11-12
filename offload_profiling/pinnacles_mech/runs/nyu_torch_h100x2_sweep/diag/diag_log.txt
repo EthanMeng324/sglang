@@ -1,0 +1,47 @@
+[2026-11-11 18:12:22] diag start job=22746435 host=gh002 commit=864c48c0f
+[2026-11-11 18:12:22] run f=161 arm=no TAG=h100d1 CHUNK_MB=16
+[2026-11-11 18:18:05] end f=161 arm=no TAG=h100d1 rc=0 average time per step: 6.5606 files: no.out.mp4 
+[2026-11-11 18:18:05] run f=161 arm=gate TAG=h100d1 CHUNK_MB=16
+[2026-11-11 18:22:48] end f=161 arm=gate TAG=h100d1 rc=0 average time per step: 4.7207 files: gate.out.mp4 
+[2026-11-11 18:22:48] run f=161 arm=no TAG=h100d2 CHUNK_MB=16
+[2026-11-11 18:27:16] end f=161 arm=no TAG=h100d2 rc=0 average time per step: 5.3311 files: no.out.mp4 
+[2026-11-11 18:27:16] run f=161 arm=gate TAG=h100d2 CHUNK_MB=16
+[2026-11-11 18:32:13] end f=161 arm=gate TAG=h100d2 rc=0 average time per step: 4.7229 files: gate.out.mp4 
+== PSNR (diag/psnr.py)
+no_h100d1 vs no_h100d2: frames=165 shape=(165, 704, 1280, 3) identical_frames=165 mean_psnr_db=inf
+no_h100d1 vs gate_h100d1: frames=165 shape=(165, 704, 1280, 3) identical_frames=0 mean_psnr_db=4.601 min_psnr_db=3.583
+no_h100d2 vs gate_h100d2: frames=165 shape=(165, 704, 1280, 3) identical_frames=0 mean_psnr_db=4.601 min_psnr_db=3.583
+[2026-11-11 18:32:22] run f=41 arm=gate TAG=h100c32 CHUNK_MB=32
+[2026-11-11 18:36:19] end f=41 arm=gate TAG=h100c32 rc=0 average time per step: 3.1653 files: gate.out.mp4 
+[2026-11-11 18:36:19] run f=41 arm=gate TAG=h100c64 CHUNK_MB=64
+[2026-11-11 18:40:28] end f=41 arm=gate TAG=h100c64 rc=0 average time per step: 3.6933 files: gate.out.mp4 
+[2026-11-11 18:40:28] run f=161 arm=no TAG=h100n CHUNK_MB=16 NSYS=1
+[2026-11-11 19:10:29] end f=161 arm=no TAG=h100n rc=124 average time per step: 5.3401 files: no.out.mp4 
+[2026-11-11 19:10:29] run f=161 arm=gate TAG=h100n CHUNK_MB=16 NSYS=1
+[2026-11-11 19:40:29] end f=161 arm=gate TAG=h100n rc=124 average time per step: 4.7114 files: gate.out.mp4 
+[2026-11-11 19:40:29] nsys analysis
+Traceback (most recent call last):
+  File "/scratch/yx2432/rebuttal_mn/sglang/offload_profiling/analyze_nsys_step_metrics.py", line 552, in <module>
+    main()
+  File "/scratch/yx2432/rebuttal_mn/sglang/offload_profiling/analyze_nsys_step_metrics.py", line 511, in main
+    input_paths = collect_inputs(args.input_paths)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/yx2432/rebuttal_mn/sglang/offload_profiling/analyze_nsys_step_metrics.py", line 133, in collect_inputs
+    raise FileNotFoundError(f"Input path not found: {path}")
+FileNotFoundError: Input path not found: /scratch/yx2432/rebuttal_mn/results/wan_c161_mn2_h100n/profiles/*_nsys.nsys-rep
+[2026-11-11 19:40:30] analyze rc=1
+Traceback (most recent call last):
+  File "/scratch/yx2432/rebuttal_mn/diag/kernels.py", line 33, in <module>
+    for k, _, _ in res[dbs[0]]["rows"][:40]:
+                       ~~~^^^
+IndexError: list index out of range
+[2026-11-11 19:40:30] kernels rc=1 -> /scratch/yx2432/rebuttal_mn/results/wan_c161_mn2_h100n/kernels_step5.md
+## step 5, device 0
+
+| arm | step window ms | kernel total ms | kernel count | NVTX windows found |
+|---|---|---|---|---|
+
+### top 25 kernels per arm (side by side, by total ms)
+[2026-11-11 19:40:30] waiting for diag/C_DECISION (run|skip), up to 60 min
+[2026-11-11 19:40:30] C decision: skip
+[2026-11-11 19:40:30] diag finished

@@ -1,0 +1,4 @@
+[18:40:28] node=0/1 host=gh002.hpc.nyu.edu ARM=no total_gpus=2 master=gh002:29507 env: SGLANG_DIT_COMM_AWARE_OFFLOAD=0
+[19:10:29] node=0 ARM=no rc=124 wall=1801s average time per step: 5.3401
+[19:10:29] node=0/1 host=gh002.hpc.nyu.edu ARM=gate total_gpus=2 master=gh002:29507 env: SGLANG_DIT_COMM_AWARE_OFFLOAD=1 SGLANG_DIT_PHASE_AWARE_PREFETCH=0 SGLANG_DIT_COMM_PREFETCH_CHUNK_SIZE_MB=16 SGLANG_DIT_COMM_AWARE_PATCH_TORCH_DIST=0 SGLANG_DIT_COMM_ACTIVE_WINDOW_MODE=gate SGLANG_DIT_OFFLOAD_RESIDENT_RATIO=
+[19:40:29] node=0 ARM=gate rc=124 wall=1800s average time per step: 4.7114

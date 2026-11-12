@@ -1,0 +1,16 @@
+[2026-11-11 19:53:26] fix check start job=22758167 host=gh014 commit=b5ed1a60e Chunk-wise offload: keep the GPU buffers of a rele
+[2026-11-11 19:53:26] IMMEDIATE_RELEASE: 160:        self._use_deferred_buffer_release = not _env_bool("SGLANG_DIT_OFFLOAD_IMMEDIATE_RELEASE", False) 
+[2026-11-11 19:53:26] run f=41 arm=no TAG=h100fix
+[2026-11-11 19:58:55] end f=41 arm=no TAG=h100fix rc=0 average time per step: 4.5963
+[2026-11-11 19:58:55] run f=41 arm=gate TAG=h100fix
+[2026-11-11 20:03:31] end f=41 arm=gate TAG=h100fix rc=0 average time per step: 3.3926
+[2026-11-11 20:03:31] run f=161 arm=gate TAG=h100fix
+[2026-11-11 20:08:22] end f=161 arm=gate TAG=h100fix rc=0 average time per step: 4.9678
+[2026-11-11 20:08:22] run f=161 arm=stock TAG=h100fix
+[2026-11-11 20:13:22] end f=161 arm=stock TAG=h100fix rc=0 average time per step: 5.0349
+== PSNR vs no (diag/psnr.py)
+gate41_fix vs no41_fix: frames=45 shape=(45, 704, 1280, 3) identical_frames=0 mean_psnr_db=5.592 min_psnr_db=5.410
+gate161_fix vs no161_d1: frames=165 shape=(165, 704, 1280, 3) identical_frames=0 mean_psnr_db=4.601 min_psnr_db=3.583
+stock161_fix vs no161_d1: frames=165 shape=(165, 704, 1280, 3) identical_frames=165 mean_psnr_db=inf
+no161_d1 vs no161_d2 (baseline): frames=165 shape=(165, 704, 1280, 3) identical_frames=165 mean_psnr_db=inf
+[2026-11-11 20:13:32] fix check finished
